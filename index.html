@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sales Performance Dashboard - Dynamic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  /* ========== RESET & BASE ========== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{
+    --bg:          #f5f7fb;
+    --bg-soft:     #eef1f7;
+    --surface:     #ffffff;
+    --border:      #e5e9f0;
+    --border-strong:#d7dce6;
+    --text:        #0f172a;
+    --text-soft:   #475569;
+    --text-muted:  #94a3b8;
+    --accent:      #2563eb;
+    --accent-2:    #7c3aed;
+    --accent-3:    #06b6d4;
+    --accent-soft: #dbeafe;
+    --success:     #10b981;
+    --success-soft:#d1fae5;
+    --warning:     #f59e0b;
+    --warning-soft:#fef3c7;
+    --danger:      #ef4444;
+    --danger-soft: #fee2e2;
+    --shadow-sm:   0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
+    --shadow-md:   0 4px 6px -1px rgba(15,23,42,.06), 0 2px 4px -2px rgba(15,23,42,.04);
+    --shadow-lg:   0 10px 15px -3px rgba(15,23,42,.08), 0 4px 6px -4px rgba(15,23,42,.05);
+    --radius:      14px;
+    --radius-sm:   10px;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { min-height: 100vh; line-height: 1.5; }
+
+  /* ========== LAYOUT ========== */
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px 28px 80px; }
+
+  /* ========== HEADER ========== */
+  header.hero {
+    background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 24px;
+    display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between;
+  }
+  .hero-left h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+  .hero-left h1 .accent { background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero-left p { color: var(--text-soft); margin-top: 4px; font-size: 14px; }
+  .hero-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .refresh-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px rgba(16,185,129,.15); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border-strong);
+    background: var(--surface); color: var(--text); font-weight: 600; font-size: 13px; cursor: pointer;
+    transition: all 0.15s ease; font-family: inherit;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+  .btn.spinning svg { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ========== DATE FILTER SECTION ========== */
+  .date-filter-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-sm);
+  }
+  .date-filter-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--text); }
+  .date-filter-inputs {
+    display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap;
+  }
+  .date-input-group {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .date-input-group label {
+    font-size: 12px; font-weight: 600; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .date-input-group input {
+    padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 13px; color: var(--text);
+    background: var(--surface); transition: all 0.15s;
+  }
+  .date-input-group input:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  /* ========== CONFIG BANNER ========== */
+  .config-banner {
+    background: linear-gradient(135deg, #fffbeb, #fef3c7);
+    border: 1px solid #fde68a;
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    display: flex; gap: 12px; align-items: flex-start;
+    font-size: 13px;
+  }
+  .config-banner.hidden { display: none; }
+  .config-banner .icon { flex-shrink: 0; width: 20px; height: 20px; color: #b45309; }
+  .config-banner details summary { font-weight: 600; color: #92400e; cursor: pointer; user-select: none; }
+  .config-banner details[open] summary { margin-bottom: 10px; }
+  .config-banner code { font-family: 'JetBrains Mono', monospace; background: rgba(180,83,9,.1); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #78350f; }
+
+  /* ========== SECTION TITLES ========== */
+  .section { margin-bottom: 28px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+  .section-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+  .section-subtitle { font-size: 13px; color: var(--text-muted); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .pill.month { background: #f3e8ff; color: var(--accent-2); }
+
+  /* ========== KPI GRID ========== */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .kpi-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 20px; box-shadow: var(--shadow-sm); position: relative; overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .kpi-card::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-3));
+  }
+  .kpi-card.accent-2::before { background: linear-gradient(90deg, var(--accent-2), #ec4899); }
+  .kpi-card.accent-success::before { background: linear-gradient(90deg, var(--success), #34d399); }
+  .kpi-card.accent-warning::before { background: linear-gradient(90deg, var(--warning), #fbbf24); }
+
+  .kpi-label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+  .kpi-label svg { width: 14px; height: 14px; }
+  .kpi-value { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: var(--text); font-variant-numeric: tabular-nums; }
+  .kpi-value .unit { font-size: 14px; font-weight: 600; color: var(--text-soft); margin-left: 4px; }
+  .kpi-sub { margin-top: 6px; font-size: 12px; color: var(--text-soft); }
+  .kpi-sub .badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 7px; border-radius: 6px; font-weight: 600; font-size: 11px; margin-right: 4px;
+  }
+  .badge.up { background: var(--success-soft); color: #065f46; }
+  .badge.neutral { background: var(--bg-soft); color: var(--text-soft); }
+  .badge.down { background: var(--danger-soft); color: #991b1b; }
+
+  /* ========== CHART GRID ========== */
+  .chart-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 18px; }
+  .chart-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; box-shadow: var(--shadow-sm);
+  }
+  .chart-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.01em; }
+  .chart-card .sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+  .chart-wrap { position: relative; height: 300px; }
+  .chart-wrap.tall { height: 360px; }
+  .chart-wrap.short { height: 240px; }
+  .col-12 { grid-column: span 12; }
+  .col-8 { grid-column: span 8; }
+  .col-6 { grid-column: span 6; }
+  .col-4 { grid-column: span 4; }
+  @media (max-width: 1024px) {
+    .col-8, .col-6, .col-4 { grid-column: span 12; }
+  }
+
+  /* ========== TOOLBAR (FILTERS) ========== */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .toolbar label { font-size: 12px; color: var(--text-soft); font-weight: 500; }
+  .chip-group { display: inline-flex; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 10px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+  .chip {
+    padding: 6px 12px; border-radius: 7px; font-size: 12px; font-weight: 600; color: var(--text-soft);
+    cursor: pointer; user-select: none; transition: all 0.15s; border: none; background: transparent; font-family: inherit;
+  }
+  .chip:hover { color: var(--text); }
+  .chip.active { background: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
+
+  /* ========== TABLE ========== */
+  .table-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; box-shadow: var(--shadow-sm);
+  }
+  .table-card > .header { padding: 18px 22px 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .table-card > .header h3 { font-size: 15px; font-weight: 700; }
+  .table-card > .header .sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  thead th {
+    text-align: left; padding: 12px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    font-weight: 700; color: var(--text-muted); background: var(--bg-soft); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; white-space: nowrap;
+  }
+  thead th.num { text-align: right; }
+  tbody td { padding: 13px 16px; font-size: 13.5px; border-bottom: 1px solid var(--border); color: var(--text); }
+  tbody td.num { text-align: right; font-weight: 500; }
+  tbody tr { transition: background 0.12s; }
+  tbody tr:hover { background: var(--bg-soft); }
+  tbody tr:last-child td { border-bottom: none; }
+  .rep-cell { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0;
+  }
+  .bar-cell { display: flex; align-items: center; gap: 10px; min-width: 140px; }
+  .bar-track { flex: 1; height: 6px; background: var(--bg-soft); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-3)); transition: width 1s cubic-bezier(.22,1,.36,1); }
+  .bar-cell .val { min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 12.5px; }
+
+  /* ========== FUNNEL ========== */
+  .funnel { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+  .funnel-row { display: flex; align-items: center; gap: 14px; }
+  .funnel-label { flex: 0 0 110px; font-size: 13px; font-weight: 600; color: var(--text); }
+  .funnel-bar { flex: 1; background: var(--bg-soft); border-radius: 8px; height: 38px; overflow: hidden; position: relative; }
+  .funnel-fill {
+    height: 100%; display: flex; align-items: center; justify-content: flex-end; padding-right: 12px;
+    color: #fff; font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums;
+    border-radius: 8px; width: 0; transition: width 1.3s cubic-bezier(.22,1,.36,1);
+  }
+  .funnel-fill.a { background: linear-gradient(90deg, var(--accent), #3b82f6); }
+  .funnel-fill.b { background: linear-gradient(90deg, var(--accent-2), #a855f7); }
+  .funnel-fill.c { background: linear-gradient(90deg, var(--success), #34d399); }
+  .funnel-meta { font-size: 12px; color: var(--text-muted); flex: 0 0 auto; width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ========== FOOTER ========== */
+  footer { margin-top: 40px; text-align: center; color: var(--text-muted); font-size: 12px; }
+  footer code { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+  /* ========== LOADER ========== */
+  .skeleton { position: relative; overflow: hidden; background: var(--bg-soft); }
+  .skeleton::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+  .fade-in { animation: fadeIn 0.5s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ========== TOAST ========== */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 1000;
+    background: var(--text); color: #fff; padding: 12px 18px; border-radius: 10px;
+    font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg);
+    transform: translateY(80px); opacity: 0; transition: all 0.3s ease;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { background: var(--danger); }
+  .toast.success { background: var(--success); }
+
+  /* ========== SCOPE TOGGLE ========== */
+  .scope-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-soft); }
+  .scope-toggle input { accent-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <header class="hero">
+    <div class="hero-left">
+      <h1>Sales Performance <span class="accent">Dashboard</span></h1>
+      <p><span id="weekRange">—</span></p>
+    </div>
+    <div class="hero-right">
+      <label class="scope-toggle" title="Include inactive reps (e.g. Bradley) in totals">
+        <input type="checkbox" id="includeInactive" />
+        <span>Include inactive reps</span>
+      </label>
+      <div class="refresh-status">
+        <span class="dot" id="liveDot"></span>
+        <span>Last refresh: <strong id="lastRefresh">—</strong></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- DATE FILTER SECTION -->
+  <div class="date-filter-card">
+    <h3>📅 Filtrar por período</h3>
+    <div class="date-filter-inputs">
+      <div class="date-input-group">
+        <label for="dateFrom">Desde</label>
+        <input type="date" id="dateFrom" />
+      </div>
+      <div class="date-input-group">
+        <label for="dateTo">Hasta</label>
+        <input type="date" id="dateTo" />
+      </div>
+      <button class="btn btn-primary" id="filterBtn" style="align-self: flex-end;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Aplicar filtro
+      </button>
+    </div>
+  </div>
+
+  <!-- WEEKLY KPIS -->
+  <section class="section">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Weekly Summary</div>
+        <div class="section-subtitle">Current period KPIs</div>
+      </div>
+      <span class="pill">This week</span>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Total Leads</div>
+        <div class="kpi-value" data-counter="totalLeads">0</div>
+        <div class="kpi-sub" id="totalLeadsSub">Leads received this week</div>
+      </div>
+      <div class="kpi-card accent-2">
+        <div class="kpi-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Total Quotes</div>
+        <div class="kpi-value" data-counter="totalQuotes">0</div>
+        <div class="kpi-sub"><span class="badge up" id="quoteRateBadge">—</span> Quote rate (Quotes / Leads)</div>
+      </div>
+      <div class="kpi-card accent-success">
+        <div class="kpi-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Avg Response Time</div>
+        <div class="kpi-value" id="avgResponse">—</div>
+        <div class="kpi-sub"><span id="avgResponseMin">—</span> minutes on average</div>
+      </div>
+      <div class="kpi-card accent-warning">
+        <div class="kpi-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Active Reps</div>
+        <div class="kpi-value" data-counter="activeReps">0</div>
+        <div class="kpi-sub"><span id="avgQuotesPerRep">—</span> quotes / rep avg</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Top Rep by Quotes</div>
+        <div class="kpi-value" id="topRepName" style="font-size:18px; line-height:1.2; margin-top:4px;">—</div>
+        <div class="kpi-sub"><strong id="topRepCount">—</strong> quotes generated</div>
+      </div>
+      <div class="kpi-card accent-2">
+        <div class="kpi-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Fastest Rep</div>
+        <div class="kpi-value" id="fastestRepName" style="font-size:18px; line-height:1.2; margin-top:4px;">—</div>
+        <div class="kpi-sub"><strong id="fastestRepTime">—</strong> avg response time</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MONTHLY KPIS -->
+  <section class="section">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Monthly Summary</div>
+        <div class="section-subtitle">Funnel performance for the month</div>
+      </div>
+      <span class="pill month" id="monthPill">—</span>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Leads (Month)</div>
+        <div class="kpi-value" data-counter="mTotalLeads">0</div>
+        <div class="kpi-sub">Monthly lead volume</div>
+      </div>
+      <div class="kpi-card accent-2">
+        <div class="kpi-label">Artwork Sent</div>
+        <div class="kpi-value" data-counter="mArtworkSent">0</div>
+        <div class="kpi-sub"><span class="badge up" id="mLeadToArt">—</span> Lead → Artwork</div>
+      </div>
+      <div class="kpi-card accent-success">
+        <div class="kpi-label">Closed Won</div>
+        <div class="kpi-value" data-counter="mClosedWon">0</div>
+        <div class="kpi-sub"><span class="badge up" id="mCloseRate">—</span> Close rate</div>
+      </div>
+      <div class="kpi-card accent-warning">
+        <div class="kpi-label">Artwork Coverage</div>
+        <div class="kpi-value" id="mCoverage">—</div>
+        <div class="kpi-sub">Artwork sent vs total leads</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FILTERS + CHARTS ROW 1 -->
+  <section class="section">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Rep Performance</div>
+        <div class="section-subtitle">Filter by the metric you want to compare</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <label>View:</label>
+      <div class="chip-group" id="repViewChips">
+        <button class="chip active" data-view="weekly">Weekly</button>
+        <button class="chip" data-view="monthly">Monthly</button>
+      </div>
+      <label style="margin-left:8px;">Metric:</label>
+      <div class="chip-group" id="repMetricChips">
+        <button class="chip active" data-metric="quotes">Quotes / Artwork</button>
+        <button class="chip" data-metric="leads">Leads</button>
+        <button class="chip" data-metric="conversion">Conversion rate</button>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card col-8">
+        <h3 id="barChartTitle">Quotes by rep</h3>
+        <div class="sub" id="barChartSub">Weekly performance comparison</div>
+        <div class="chart-wrap tall"><canvas id="repBar"></canvas></div>
+      </div>
+      <div class="chart-card col-4">
+        <h3>Quote Market Share</h3>
+        <div class="sub">Distribution of quotes across reps</div>
+        <div class="chart-wrap tall"><canvas id="repDonut"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHARTS ROW 2 -->
+  <section class="section">
+    <div class="chart-grid">
+      <div class="chart-card col-8">
+        <h3>Daily Quotes Trend</h3>
+        <div class="sub">Quotes per rep across each day of the week</div>
+        <div class="chart-wrap"><canvas id="dailyLine"></canvas></div>
+      </div>
+      <div class="chart-card col-4">
+        <h3>Monthly Funnel</h3>
+        <div class="sub">Leads → Artwork → Closed Won</div>
+        <div class="funnel" id="funnel">
+          <div class="funnel-row">
+            <div class="funnel-label">Leads</div>
+            <div class="funnel-bar"><div class="funnel-fill a" id="fLeads">0</div></div>
+            <div class="funnel-meta">100%</div>
+          </div>
+          <div class="funnel-row">
+            <div class="funnel-label">Artwork</div>
+            <div class="funnel-bar"><div class="funnel-fill b" id="fArt">0</div></div>
+            <div class="funnel-meta" id="fArtPct">—</div>
+          </div>
+          <div class="funnel-row">
+            <div class="funnel-label">Closed Won</div>
+            <div class="funnel-bar"><div class="funnel-fill c" id="fWon">0</div></div>
+            <div class="funnel-meta" id="fWonPct">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHARTS ROW 3 -->
+  <section class="section">
+    <div class="chart-grid">
+      <div class="chart-card col-6">
+        <h3>Avg Response Time by Rep</h3>
+        <div class="sub">Average minutes between lead received and first response (lower is better)</div>
+        <div class="chart-wrap"><canvas id="responseBar"></canvas></div>
+      </div>
+      <div class="chart-card col-6">
+        <h3>Monthly Close Rate by Rep</h3>
+        <div class="sub">% of leads ending in Closed Won</div>
+        <div class="chart-wrap"><canvas id="closeRateBar"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA TABLE -->
+  <section class="section">
+    <div class="table-card">
+      <div class="header">
+        <div>
+          <h3>Rep Detail</h3>
+          <div class="sub">All KPIs combined (weekly + monthly)</div>
+        </div>
+        <div class="toolbar" style="margin: 0;">
+          <input type="text" id="tableSearch" placeholder="Search rep…" style="padding:8px 12px; border:1px solid var(--border-strong); border-radius: 8px; font-family:inherit; font-size:13px; width:200px;" />
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="repTable">
+          <thead>
+            <tr>
+              <th>Rep</th>
+              <th class="num">Leads (wk)</th>
+              <th class="num">Quotes (wk)</th>
+              <th class="num">Quote Rate</th>
+              <th class="num">Avg Response</th>
+              <th class="num">Leads (mo)</th>
+              <th class="num">Artwork Sent</th>
+              <th class="num">Closed Won</th>
+              <th class="num">Close Rate</th>
+              <th>Performance</th>
+            </tr>
+          </thead>
+          <tbody id="repTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Dashboard · Source: <code id="sourceLabel">n8n webhook</code></p>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   CONFIGURACIÓN - WEBHOOK N8N
+   ============================================================ */
+const N8N_WEBHOOK_URL = "https://api.pinprosplus.com/webhook/dashboard";  // ← Reemplaza con tu URL de webhook
+
+/* ============================================================
+   CHART.JS DEFAULTS
+   ============================================================ */
+Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+Chart.defaults.font.size = 12;
+Chart.defaults.color = '#475569';
+Chart.defaults.borderColor = '#e5e9f0';
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.plugins.legend.labels.pointStyle = 'circle';
+Chart.defaults.plugins.legend.labels.padding = 14;
+Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15,23,42,0.95)';
+Chart.defaults.plugins.tooltip.titleFont = { weight: '700', size: 13 };
+Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
+Chart.defaults.plugins.tooltip.padding = 12;
+Chart.defaults.plugins.tooltip.cornerRadius = 8;
+Chart.defaults.plugins.tooltip.displayColors = true;
+Chart.defaults.plugins.tooltip.boxPadding = 6;
+
+const PALETTE = {
+  blue:   '#2563eb', violet: '#7c3aed', cyan:   '#06b6d4',
+  green:  '#10b981', amber:  '#f59e0b', rose:   '#ec4899',
+  slate:  '#64748b', indigo: '#6366f1'
+};
+const REP_COLORS = [PALETTE.blue, PALETTE.violet, PALETTE.cyan, PALETTE.green, PALETTE.amber, PALETTE.rose, PALETTE.indigo];
+
+/* ============================================================
+   UTILITIES
+   ============================================================ */
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+const fmt = new Intl.NumberFormat('en-US');
+
+function parseMin(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return v;
+  const s = String(v);
+  const numMatch = s.match(/(-?[\d.]+)\s*min/i);
+  if (numMatch) return parseFloat(numMatch[1]);
+  const hm = s.match(/(?:(\d+)h)?\s*(?:(\d+)m)?/i);
+  if (hm && (hm[1] || hm[2])) return (parseInt(hm[1] || 0) * 60) + parseInt(hm[2] || 0);
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function normalizePct(v){
+  if (v == null || v === '') return 0;
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace('%',''));
+  if (isNaN(n)) return 0;
+  return Math.abs(n) <= 1 ? n * 100 : n;
+}
+
+const pctFmt = (n) => (n == null || isNaN(n)) ? '—' : `${Number(n).toFixed(1)}%`;
+
+function initials(name){ return name.split(/\s+/).filter(Boolean).slice(0,2).map(s=>s[0].toUpperCase()).join(''); }
+
+function minToHhMm(m){ m = Math.round(m); if(!m) return '0m'; const h=Math.floor(m/60), mm=m%60; return h? `${h}h ${mm}m` : `${mm}m`; }
+
+function formatDateRange(start, end){
+  try{
+    const s = new Date(start), e = new Date(end);
+    const opt = { day:'numeric', month:'short' };
+    return `${s.toLocaleDateString('en-US', opt)} – ${e.toLocaleDateString('en-US', opt)}, ${e.getFullYear()}`;
+  } catch { return `${start} – ${end}`; }
+}
+
+function formatTs(ts){
+  try { const d = new Date(ts); return d.toLocaleString('en-US', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short' }); }
+  catch { return ts; }
+}
+
+function animateCounter(el, target, duration = 1100){
+  if (!el) return;
+  const start = 0; const t0 = performance.now();
+  const isFloat = target % 1 !== 0;
+  function step(now){
+    const p = Math.min(1, (now - t0) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const cur = start + (target - start) * eased;
+    el.textContent = isFloat ? cur.toFixed(1) : fmt.format(Math.round(cur));
+    if (p < 1) requestAnimationFrame(step); else el.textContent = isFloat ? target.toFixed(1) : fmt.format(target);
+  }
+  requestAnimationFrame(step);
+}
+
+function showToast(msg, type='success'){
+  const t = $('#toast'); t.textContent = msg; t.className = `toast show ${type}`;
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function pick(row, baseKey){
+  if (!row) return null;
+  const wantInactive = state && state.includeInactive;
+  const candidates = wantInactive
+    ? [`${baseKey} (with Bradley)`, `${baseKey}_All`, baseKey, `${baseKey} (Active Reps)`, `${baseKey}_Active`]
+    : [`${baseKey} (Active Reps)`, `${baseKey}_Active`, baseKey, `${baseKey} (with Bradley)`, `${baseKey}_All`];
+  for (const k of candidates) {
+    if (row[k] != null && row[k] !== '') return row[k];
+  }
+  return null;
+}
+
+/* ============================================================
+   FETCH DATA FROM N8N WEBHOOK
+   ============================================================ */
+async function fetchDataFromWebhook(dateFrom, dateTo){
+  try {
+    const payload = {
+      dateFrom: dateFrom,
+      dateTo: dateTo
+    };
+
+    const response = await fetch(N8N_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    console.error('Webhook fetch failed:', err);
+    throw err;
+  }
+}
+
+/* ============================================================
+   STATE + CHARTS
+   ============================================================ */
+const state = { data: null, charts: {}, source: 'webhook', view: 'weekly', metric: 'quotes', includeInactive: false };
+
+function destroyChart(key){ if (state.charts[key]) { state.charts[key].destroy(); delete state.charts[key]; } }
+function colorFor(i){ return REP_COLORS[i % REP_COLORS.length]; }
+
+/* ---- DATA ACCESSORS ---- */
+function summaryVals(){
+  const s = state.data.summary || {};
+  return {
+    weekStart: s.Week_Start,
+    weekEnd:   s.Week_End,
+    leads:     Number(pick(s, 'Total_Leads')  ?? s.Total_Leads  ?? 0),
+    quotes:    Number(pick(s, 'Total_Quotes') ?? s.Total_Quotes ?? 0),
+    avgRespMin: parseMin(s.Avg_Response_Min),
+    avgRespTime: s.Avg_Response_Time || minToHhMm(parseMin(s.Avg_Response_Min)),
+    activeReps: Number(s.Active_Reps || 0),
+    quoteRatePct: normalizePct(s.Quote_Rate_Pct),
+    avgQuotesPerRep: Number(s.Avg_Quotes_Per_Rep || 0),
+    topRep: s.Top_Rep_By_Quotes,
+    topRepCount: Number(s.Top_Rep_Quote_Count || 0),
+    fastestRep: s.Fastest_Rep,
+    fastestRepMin: parseMin(s.Fastest_Rep_Avg_Min),
+    fastestRepTime: s.Fastest_Rep_Avg_Time || minToHhMm(parseMin(s.Fastest_Rep_Avg_Min)),
+    lastRefresh: s.Last_Refresh,
+  };
+}
+
+function monthlyVals(){
+  const m = state.data.monthlySummary || {};
+  return {
+    month: m.Month,
+    leads:    Number(pick(m, 'Total_Leads')      ?? m.Total_Leads      ?? 0),
+    artwork:  Number(pick(m, 'Artwork_Sent')     ?? m.Artwork_Sent     ?? 0),
+    closed:   Number(pick(m, 'Total_Closed_Won') ?? m.Closed_Won       ?? m.Total_Closed_Won ?? 0),
+    leadToArtPct: normalizePct(m.Lead_to_Art_Pct),
+    closeRatePct: normalizePct(m.Close_Rate_Pct),
+    activeReps: Number(m.Active_Reps || 0),
+  };
+}
+
+function repWeekly(){
+  return (state.data.weeklyByRep || []).map(r => ({
+    Rep: r.Rep,
+    Leads: Number(r.Leads || 0),
+    Quotes: Number(r.Quotes || 0),
+    Avg_Response_Min: parseMin(r.Avg_Response_Min),
+    Avg_Response_Time: r.Avg_Response_Time || minToHhMm(parseMin(r.Avg_Response_Min)),
+  }));
+}
+
+function repMonthly(){
+  return (state.data.monthlyByRep || []).map(r => ({
+    Rep: r.Rep,
+    Total_Leads: Number(r.Total_Leads || 0),
+    Artwork_Sent: Number(r.Artwork_Sent || 0),
+    Lead_to_Art_Pct: normalizePct(r.Lead_to_Art_Pct),
+    Closed_Won: Number(r.Closed_Won || 0),
+    Close_Rate_Pct: normalizePct(r.Close_Rate_Pct),
+  }));
+}
+
+/* ---- CHARTS ---- */
+function renderRepBar(){
+  destroyChart('repBar');
+  const ctx = document.getElementById('repBar');
+  const weekly  = repWeekly().sort((a,b) => b.Quotes - a.Quotes);
+  const monthly = repMonthly().sort((a,b) => b.Closed_Won - a.Closed_Won);
+
+  let labels, datasets, title, subtitle;
+  if (state.view === 'weekly' && state.metric === 'quotes') {
+    labels = weekly.map(r => r.Rep);
+    datasets = [
+      { label:'Leads',  data: weekly.map(r => r.Leads),  backgroundColor: PALETTE.blue + '33', borderColor: PALETTE.blue, borderWidth: 2, borderRadius: 6 },
+      { label:'Quotes', data: weekly.map(r => r.Quotes), backgroundColor: PALETTE.violet, borderRadius: 6 }
+    ];
+    title = 'Quotes vs Leads (Weekly)';
+    subtitle = 'Leads received vs quotes generated';
+  } else if (state.view === 'weekly' && state.metric === 'leads') {
+    labels = weekly.map(r => r.Rep);
+    datasets = [{ label:'Leads', data: weekly.map(r => r.Leads), backgroundColor: PALETTE.blue, borderRadius: 6 }];
+    title = 'Leads by rep (Weekly)';
+    subtitle = 'Leads assigned during the period';
+  } else if (state.view === 'weekly' && state.metric === 'conversion') {
+    labels = weekly.map(r => r.Rep);
+    datasets = [{ label:'Quote Rate %', data: weekly.map(r => r.Leads ? +(r.Quotes / r.Leads * 100).toFixed(1) : 0), backgroundColor: PALETTE.cyan, borderRadius: 6 }];
+    title = 'Quote Rate by rep (Weekly)';
+    subtitle = '% of leads converted to a quote';
+  } else if (state.view === 'monthly' && state.metric === 'quotes') {
+    labels = monthly.map(r => r.Rep);
+    datasets = [
+      { label:'Artwork Sent', data: monthly.map(r => r.Artwork_Sent), backgroundColor: PALETTE.violet, borderRadius: 6 },
+      { label:'Closed Won',   data: monthly.map(r => r.Closed_Won),   backgroundColor: PALETTE.green,  borderRadius: 6 },
+    ];
+    title = 'Artwork Sent vs Closed Won (Monthly)';
+    subtitle = 'End stages of the monthly funnel';
+  } else if (state.view === 'monthly' && state.metric === 'leads') {
+    labels = monthly.map(r => r.Rep);
+    datasets = [{ label:'Leads', data: monthly.map(r => r.Total_Leads), backgroundColor: PALETTE.blue, borderRadius: 6 }];
+    title = 'Leads by rep (Monthly)';
+    subtitle = 'Total leads assigned during the month';
+  } else {
+    labels = monthly.map(r => r.Rep);
+    datasets = [{ label:'Close Rate %', data: monthly.map(r => +r.Close_Rate_Pct.toFixed(1)), backgroundColor: PALETTE.green, borderRadius: 6 }];
+    title = 'Close Rate by rep (Monthly)';
+    subtitle = '% of leads ending in Closed Won';
+  }
+
+  $('#barChartTitle').textContent = title;
+  $('#barChartSub').textContent = subtitle;
+
+  state.charts.repBar = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 900, easing: 'easeOutQuart' },
+      plugins: { legend: { position: 'bottom', align: 'start' } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { beginAtZero: true, grid: { color: '#eef1f7' }, border: { display: false } }
+      }
+    }
+  });
+}
+
+function renderRepDonut(){
+  destroyChart('repDonut');
+  const ctx = document.getElementById('repDonut');
+  const rows = repWeekly().sort((a,b) => b.Quotes - a.Quotes);
+  const labels = rows.map(r => r.Rep);
+  const data = rows.map(r => r.Quotes);
+  const colors = rows.map((_, i) => colorFor(i));
+
+  state.charts.repDonut = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 3, borderColor: '#fff', hoverOffset: 10 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      animation: { animateRotate: true, animateScale: true, duration: 1100 },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (c) => {
+              const total = c.dataset.data.reduce((a,b)=>a+b,0);
+              const p = total ? (c.parsed / total * 100).toFixed(1) : 0;
+              return `${c.label}: ${c.parsed} quotes (${p}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderDailyLine(){
+  destroyChart('dailyLine');
+  const ctx = document.getElementById('dailyLine');
+  const { days, rows } = state.data.dailyQuotes;
+  const labels = days.map(d => {
+    const dt = new Date(d);
+    return dt.toLocaleDateString('en-US', { weekday:'short', day:'numeric' });
+  });
+  const datasets = rows.map((r, i) => {
+    const c = colorFor(i);
+    return {
+      label: r.Rep, data: r.values,
+      borderColor: c, backgroundColor: c + '22',
+      tension: 0.35, borderWidth: 2.5, fill: false,
+      pointRadius: 4, pointHoverRadius: 6, pointBackgroundColor: c, pointBorderColor: '#fff', pointBorderWidth: 2
+    };
+  });
+  state.charts.dailyLine = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 1000, easing: 'easeOutQuart' },
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', align: 'start' } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, grid: { color: '#eef1f7' }, border: { display: false }, ticks: { precision: 0 } }
+      }
+    }
+  });
+}
+
+function renderResponseBar(){
+  destroyChart('responseBar');
+  const ctx = document.getElementById('responseBar');
+  const rows = repWeekly().filter(r => r.Avg_Response_Min > 0).sort((a,b) => a.Avg_Response_Min - b.Avg_Response_Min);
+  const labels = rows.map(r => r.Rep);
+  const data = rows.map(r => +r.Avg_Response_Min.toFixed(1));
+  const bg = data.map((_, i) => i === 0 ? PALETTE.green : PALETTE.blue);
+  state.charts.responseBar = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Avg response (min)', data, backgroundColor: bg, borderRadius: 6 }] },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      animation: { duration: 1000 },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (c) => `${c.parsed.x} min · ${minToHhMm(c.parsed.x)}` } }
+      },
+      scales: {
+        x: { beginAtZero: true, grid: { color: '#eef1f7' }, border: { display: false }, ticks: { callback: (v) => `${v}m` } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderCloseRateBar(){
+  destroyChart('closeRateBar');
+  const ctx = document.getElementById('closeRateBar');
+  const rows = repMonthly().sort((a,b) => b.Close_Rate_Pct - a.Close_Rate_Pct);
+  const labels = rows.map(r => r.Rep);
+  const data = rows.map(r => +r.Close_Rate_Pct.toFixed(1));
+  const bg = data.map((_, i) => i === 0 ? PALETTE.green : PALETTE.violet);
+  state.charts.closeRateBar = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Close Rate %', data, backgroundColor: bg, borderRadius: 6 }] },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      animation: { duration: 1000 },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (c) => `${c.parsed.x}% close rate` } }
+      },
+      scales: {
+        x: { beginAtZero: true, grid: { color: '#eef1f7' }, border: { display: false }, ticks: { callback: (v) => `${v}%` } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderFunnel(){
+  const m = monthlyVals();
+  const max = Math.max(m.leads || 0, 1);
+  const fLeads = $('#fLeads'), fArt = $('#fArt'), fWon = $('#fWon');
+  fLeads.textContent = fmt.format(m.leads);
+  fArt.textContent   = fmt.format(m.artwork);
+  fWon.textContent   = fmt.format(m.closed);
+  fLeads.style.width = '0%'; fArt.style.width = '0%'; fWon.style.width = '0%';
+  requestAnimationFrame(() => {
+    fLeads.style.width = '100%';
+    fArt.style.width   = `${Math.max(6, (m.artwork / max) * 100)}%`;
+    fWon.style.width   = `${Math.max(4, (m.closed / max) * 100)}%`;
+  });
+  $('#fArtPct').textContent = pctFmt(m.leadToArtPct);
+  $('#fWonPct').textContent = pctFmt(m.closeRatePct);
+}
+
+function renderTable(){
+  const body = $('#repTableBody');
+  body.innerHTML = '';
+  const weekly  = Object.fromEntries(repWeekly().map(r => [r.Rep, r]));
+  const monthly = Object.fromEntries(repMonthly().map(r => [r.Rep, r]));
+  const allReps = new Set([...Object.keys(weekly), ...Object.keys(monthly)]);
+  const reps = [...allReps].sort((a,b) => (monthly[b]?.Closed_Won || 0) - (monthly[a]?.Closed_Won || 0));
+  const maxClosed = Math.max(...Object.values(monthly).map(r => r.Closed_Won || 0), 1);
+
+  reps.forEach((rep, i) => {
+    const w = weekly[rep] || {};
+    const m = monthly[rep] || {};
+    const qRate = w.Leads ? (w.Quotes / w.Leads * 100) : null;
+    const perf = (m.Closed_Won || 0) / maxClosed * 100;
+    const color = colorFor(i);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <div class="rep-cell">
+          <span class="avatar" style="background:${color}">${initials(rep)}</span>
+          <span>${rep}</span>
+        </div>
+      </td>
+      <td class="num">${w.Leads != null ? fmt.format(w.Leads) : '—'}</td>
+      <td class="num">${w.Quotes != null ? fmt.format(w.Quotes) : '—'}</td>
+      <td class="num">${qRate == null ? '—' : pctFmt(qRate)}</td>
+      <td class="num">${w.Avg_Response_Time || (w.Avg_Response_Min ? minToHhMm(w.Avg_Response_Min) : '—')}</td>
+      <td class="num">${m.Total_Leads != null ? fmt.format(m.Total_Leads) : '—'}</td>
+      <td class="num">${m.Artwork_Sent != null ? fmt.format(m.Artwork_Sent) : '—'}</td>
+      <td class="num">${m.Closed_Won != null ? fmt.format(m.Closed_Won) : '—'}</td>
+      <td class="num">${pctFmt(m.Close_Rate_Pct)}</td>
+      <td>
+        <div class="bar-cell">
+          <div class="bar-track"><div class="bar-fill" style="width:0%; background: linear-gradient(90deg, ${color}, ${color}cc);" data-w="${perf.toFixed(1)}"></div></div>
+          <span class="val">${(m.Closed_Won || 0)}</span>
+        </div>
+      </td>
+    `;
+    body.appendChild(tr);
+  });
+
+  requestAnimationFrame(() => {
+    $$('#repTableBody .bar-fill').forEach(b => { b.style.width = b.dataset.w + '%'; });
+  });
+}
+
+function renderKpis(){
+  const s = summaryVals();
+  const m = monthlyVals();
+
+  animateCounter($('[data-counter="totalLeads"]'),  s.leads);
+  animateCounter($('[data-counter="totalQuotes"]'), s.quotes);
+  animateCounter($('[data-counter="activeReps"]'),  s.activeReps);
+  $('#avgResponse').textContent    = s.avgRespTime;
+  $('#avgResponseMin').textContent = s.avgRespMin.toFixed(1);
+  $('#quoteRateBadge').textContent = pctFmt(s.quoteRatePct);
+  $('#avgQuotesPerRep').textContent = s.avgQuotesPerRep.toFixed(1);
+  $('#topRepName').textContent     = s.topRep || '—';
+  $('#topRepCount').textContent    = fmt.format(s.topRepCount);
+  $('#fastestRepName').textContent = s.fastestRep || '—';
+  $('#fastestRepTime').textContent = s.fastestRepTime;
+
+  animateCounter($('[data-counter="mTotalLeads"]'),  m.leads);
+  animateCounter($('[data-counter="mArtworkSent"]'), m.artwork);
+  animateCounter($('[data-counter="mClosedWon"]'),   m.closed);
+  $('#mLeadToArt').textContent = pctFmt(m.leadToArtPct);
+  $('#mCloseRate').textContent = pctFmt(m.closeRatePct);
+  const cov = m.leads ? (m.artwork / m.leads * 100) : 0;
+  $('#mCoverage').textContent = pctFmt(cov);
+
+  $('#weekRange').textContent = formatDateRange(s.weekStart, s.weekEnd);
+  $('#lastRefresh').textContent = formatTs(s.lastRefresh || new Date().toISOString());
+  try {
+    const mm = new Date(m.month);
+    $('#monthPill').textContent = mm.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+  } catch { $('#monthPill').textContent = m.month; }
+
+  const note = state.includeInactive
+    ? `Including all reps (active + inactive)`
+    : `Active reps only (${s.activeReps})`;
+  $('#totalLeadsSub').textContent = note;
+}
+
+function renderAll(){
+  renderKpis();
+  renderRepBar();
+  renderRepDonut();
+  renderDailyLine();
+  renderResponseBar();
+  renderCloseRateBar();
+  renderFunnel();
+  renderTable();
+}
+
+/* ---- LOAD DATA ---- */
+async function load(dateFrom, dateTo, showAnim=true){
+  const btn = $('#filterBtn');
+  btn.classList.add('spinning');
+  btn.disabled = true;
+  try {
+    const data = await fetchDataFromWebhook(dateFrom, dateTo);
+    state.data = data;
+    renderAll();
+    if (showAnim) showToast('✓ Datos actualizados desde n8n', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('Error al cargar datos. Verifica la URL del webhook.', 'error');
+  } finally {
+    btn.classList.remove('spinning');
+    btn.disabled = false;
+  }
+}
+
+/* ---- EVENT LISTENERS ---- */
+$('#filterBtn').addEventListener('click', () => {
+  const dateFrom = $('#dateFrom').value;
+  const dateTo = $('#dateTo').value;
+
+  if (!dateFrom || !dateTo) {
+    showToast('Selecciona ambas fechas', 'error');
+    return;
+  }
+
+  load(dateFrom, dateTo, true);
+});
+
+$$('#repViewChips .chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    $$('#repViewChips .chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    state.view = chip.dataset.view;
+    renderRepBar();
+  });
+});
+
+$$('#repMetricChips .chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    $$('#repMetricChips .chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    state.metric = chip.dataset.metric;
+    renderRepBar();
+  });
+});
+
+$('#includeInactive').addEventListener('change', (e) => {
+  state.includeInactive = e.target.checked;
+  if (state.data) renderAll();
+});
+
+$('#tableSearch').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  $$('#repTableBody tr').forEach(tr => {
+    const rep = tr.querySelector('.rep-cell span:last-child')?.textContent.toLowerCase() || '';
+    tr.style.display = rep.includes(q) ? '' : 'none';
+  });
+});
+
+/* ---- SET DEFAULT DATES ---- */
+const today = new Date();
+const oneMonthAgo = new Date(today);
+oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+$('#dateFrom').valueAsDate = oneMonthAgo;
+$('#dateTo').valueAsDate = today;
+
+/* ---- BOOT: LOAD WITH DEFAULT DATES ---- */
+load(oneMonthAgo.toISOString().split('T')[0], today.toISOString().split('T')[0], false);
+</script>
+</body>
+</html>
