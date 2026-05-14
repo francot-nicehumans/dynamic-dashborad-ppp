@@ -1,0 +1,1591 @@
+{
+  "name": "PPP - Dashboard GS v3 - PATCHED (cron + webhook refresh)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "7e3a9458-011e-4d75-b200-329ababe0ad0",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -5216,
+        3616
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "app2W6skQHiZlFKje",
+          "mode": "list",
+          "cachedResultName": "PinProsPlus",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblmR6MdAwZgloZzl",
+          "mode": "list",
+          "cachedResultName": "Deals",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje/tblmR6MdAwZgloZzl"
+        },
+        "filterByFormula": "=AND(IS_AFTER({Date Created}, DATEADD(DATETIME_PARSE('{{ $('Calculate Week Dates').first().json.weekStartDate }}'), -1, 'days')), IS_BEFORE({Date Created}, DATEADD(DATETIME_PARSE('{{ $('Calculate Week Dates').first().json.weekEndDate }}'), 1, 'days')))",
+        "options": {},
+        "sort": {
+          "property": [
+            {
+              "field": "Date Created"
+            }
+          ]
+        }
+      },
+      "id": "e23601ec-d40e-4c5f-8c50-399869b4f087",
+      "name": "Airtable - Weekly Deals",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -4048,
+        3360
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "3iO8H3lXPGXKI1vj",
+          "name": "Airtable Personal Access Token OFFICIAL | For Old Bases"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "app2W6skQHiZlFKje",
+          "mode": "list",
+          "cachedResultName": "PinProsPlus",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblmR6MdAwZgloZzl",
+          "mode": "list",
+          "cachedResultName": "Deals",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje/tblmR6MdAwZgloZzl"
+        },
+        "filterByFormula": "=AND(IS_AFTER({Date Created}, DATEADD(DATETIME_PARSE('{{ $('Calculate Month Dates').first().json.monthStartDate }}'), -1, 'days')), IS_BEFORE({Date Created}, DATEADD(DATETIME_PARSE('{{ $('Calculate Month Dates').first().json.monthEndDate }}'), 1, 'days')))",
+        "options": {}
+      },
+      "id": "b46fd2b3-85e2-4951-87da-f5b5b31af6b3",
+      "name": "Airtable - Monthly Deals",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -4048,
+        3872
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "3iO8H3lXPGXKI1vj",
+          "name": "Airtable Personal Access Token OFFICIAL | For Old Bases"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// WEEKLY METRICS - from \"Airtable - Weekly Deals\"\n// ============================================================\nconst weeklyItems = $('Airtable - Weekly Deals').all();\nconst activeRepItems = $('Airtable - Active Reps').all();\n\n// Reps excluidos del per-rep y rates, pero SI cuentan en volumen total\nconst EXCLUDED_REPS = ['Bradley Fry'];\n\n// Build lookup: recordId -> Full Name, y recolectar TODOS los reps\nconst repIdToName = {};\nconst allRepNames = new Set();\nfor (const item of activeRepItems) {\n  const row = item.json.fields ?? item.json;\n  const fullName = String(row['Full Name'] ?? '').trim();\n  const recordId = item.json.id ?? '';\n  if (fullName) {\n    allRepNames.add(fullName);\n    if (recordId) repIdToName[recordId] = fullName;\n  }\n}\n\n// activeRepNames = los que SI van a per-rep / rates (sin Bradley)\nconst activeRepNames = new Set([...allRepNames].filter(n => !EXCLUDED_REPS.includes(n)));\n\nconst CONFIG = {\n  createdField: 'Date Created',\n  minutesField: 'Lead to Quote (Minutes) During Business Hours',\n  repField: 'Sales',\n  stageField: 'Stage',\n  stageQuote: 'Quote',\n};\n\nfunction resolveRep(value) {\n  if (Array.isArray(value)) {\n    return value.map(v => resolveRep(v)).flat().filter(Boolean);\n  }\n  let str = String(value ?? '').trim();\n  if (!str) return [];\n  str = str.replace(/^\\d+:/, '');\n  if (str.startsWith('rec') && repIdToName[str]) {\n    return [repIdToName[str]];\n  }\n  if (allRepNames.has(str)) {\n    return [str];\n  }\n  if (!str.startsWith('rec')) {\n    return [str];\n  }\n  return [];\n}\n\nfunction normalizeStage(value) {\n  if (Array.isArray(value)) return String(value[0] ?? '').trim();\n  return String(value ?? '').trim();\n}\n\nfunction toNumber(value) {\n  if (value === null || value === undefined || value === '') return null;\n  if (Array.isArray(value)) {\n    if (value.length === 0) return null;\n    value = value[0];\n  }\n  const n = Number(value);\n  return Number.isFinite(n) ? n : null;\n}\n\nfunction getStartOfWeekMonday(date) {\n  const d = new Date(date);\n  const day = d.getDay();\n  const diff = day === 0 ? -6 : 1 - day;\n  d.setHours(0, 0, 0, 0);\n  d.setDate(d.getDate() + diff);\n  return d;\n}\n\nfunction getEndOfWeekSunday(date) {\n  const start = getStartOfWeekMonday(date);\n  const end = new Date(start);\n  end.setDate(end.getDate() + 6);\n  end.setHours(23, 59, 59, 999);\n  return end;\n}\n\nfunction isWithinRange(dateValue, start, end) {\n  if (!dateValue) return false;\n  const d = new Date(dateValue);\n  if (Number.isNaN(d.getTime())) return false;\n  return d >= start && d <= end;\n}\n\nfunction formatDateKey(dateValue) {\n  const d = new Date(dateValue);\n  if (Number.isNaN(d.getTime())) return '';\n  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;\n}\n\nfunction formatHours(minutes) {\n  if (minutes === null || minutes === undefined || !Number.isFinite(minutes)) return '';\n  const totalMinutes = Math.round(minutes);\n  const days = Math.floor(totalMinutes / 1440);\n  const hours = Math.floor((totalMinutes % 1440) / 60);\n  const mins = totalMinutes % 60;\n  const parts = [];\n  if (days) parts.push(`${days}d`);\n  if (hours || days) parts.push(`${hours}h`);\n  parts.push(`${mins}m`);\n  return parts.join(' ');\n}\n\nconst now = new Date();\nconst weekStart = getStartOfWeekMonday(now);\nconst weekEnd = getEndOfWeekSunday(now);\n\n// reps de display (sin Bradley)\nconst reps = Array.from(activeRepNames).sort((a, b) => a.localeCompare(b));\nconst weeklyRecords = [];\n\nfor (const item of weeklyItems) {\n  const row = item.json.fields ?? item.json;\n  const created = row[CONFIG.createdField];\n  const minutes = toNumber(row[CONFIG.minutesField]);\n  const resolvedReps = resolveRep(row[CONFIG.repField]);\n  const rep = resolvedReps[0] ?? '';\n  const stage = normalizeStage(row[CONFIG.stageField]);\n  const lmtQuoteStage = row['LMT - Quote Stage (For Follow Up)'];\n\n  if (isWithinRange(created, weekStart, weekEnd)) {\n    weeklyRecords.push({\n      created,\n      createdDateKey: formatDateKey(created),\n      minutes,\n      rep,\n      stage,\n      lmtQuoteStage,\n    });\n  }\n}\n\n// --- Weekly Summary ---\nconst summary = {\n  Week_Start: formatDateKey(weekStart),\n  Week_End: formatDateKey(weekEnd),\n  'Total_Leads (with Bradley)': 0,\n  'Total_Leads (Active Reps)': 0,\n  'Total_Quotes (with Bradley)': 0,\n  'Total_Quotes (Active Reps)': 0,\n  Avg_Response_Min: 0,\n  Avg_Response_Time: '0m',\n  Active_Reps: reps.length,\n  Last_Refresh: new Date().toISOString(),\n};\n\n\n// Counters para rates (sin Bradley)\nlet activeLeadsCount = 0;\nlet activeQuotesCount = 0;\n\n// --- Weekly By Rep (solo reps activos) ---\nconst byRep = {};\nconst dailyQuotesMap = {};\n\nfor (const rep of reps) {\n  byRep[rep] = {\n    Rep: rep,\n    Leads: 0,\n    Quotes: 0,\n    total_quote_minutes: 0,\n    quote_time_count: 0,\n    Avg_Response_Min: '0 min',\n    Avg_Response_Time: '0m',\n  };\n}\n\nfor (const row of weeklyRecords) {\n  // Saltar registros con rep desconocido\n  if (!row.rep || !allRepNames.has(row.rep)) continue;\n\n  // VOLUMEN: cuenta a todos (incluye Bradley)\n  summary['Total_Leads (with Bradley)'] += 1;\n  if (row.lmtQuoteStage) {\n    summary['Total_Quotes (with Bradley)'] += 1;\n  }\n\n  // Si el rep es excluido (Bradley), saltar per-rep + quality\n  if (EXCLUDED_REPS.includes(row.rep)) continue;\n\n  // PER-REP + RATES (solo reps activos)\n  if (!dailyQuotesMap[row.rep]) dailyQuotesMap[row.rep] = {};\n  if (!dailyQuotesMap[row.rep][row.createdDateKey]) dailyQuotesMap[row.rep][row.createdDateKey] = 0;\n\n  byRep[row.rep].Leads += 1;\n  activeLeadsCount += 1;\n\n  if (row.lmtQuoteStage) {\n    byRep[row.rep].Quotes += 1;\n    activeQuotesCount += 1;\n    dailyQuotesMap[row.rep][row.createdDateKey] += 1;\n  }\n\n  if (row.lmtQuoteStage && row.minutes !== null && row.minutes > 0) {\n    byRep[row.rep].total_quote_minutes += row.minutes;\n    byRep[row.rep].quote_time_count += 1;\n    summary.Avg_Response_Min += row.minutes;\n  }\n}\n\nlet overallQuoteTimeCount = 0;\nconst byRepRows = Object.values(byRep).map((r) => {\n  if (r.quote_time_count > 0) {\n    const avgMin = Number((r.total_quote_minutes / r.quote_time_count).toFixed(2));\n    r.Avg_Response_Time = formatHours(avgMin);\n    r.Avg_Response_Min = `${avgMin.toFixed(2)} min`;\n    overallQuoteTimeCount += r.quote_time_count;\n  }\n  delete r.total_quote_minutes;\n  delete r.quote_time_count;\n  return r;\n});\n\nlet summaryAvgMin = 0;\nif (overallQuoteTimeCount > 0) {\n  summaryAvgMin = Number((summary.Avg_Response_Min / overallQuoteTimeCount).toFixed(2));\n}\nsummary.Avg_Response_Time = formatHours(summaryAvgMin);\nsummary.Avg_Response_Min = `${summaryAvgMin.toFixed(2)} min`;\n\n\n\n// Asignar el total de leads y quotes de reps activos\nsummary['Total_Leads (Active Reps)'] = activeLeadsCount;\nsummary['Total_Quotes (Active Reps)'] = activeQuotesCount;\n\n\n// Quote_Rate_Pct = quotes activos / leads activos (sin Bradley)\nsummary.Quote_Rate_Pct = activeLeadsCount\n  ? `${((activeQuotesCount / activeLeadsCount) * 100).toFixed(2)}%`\n  : '0%';\n\n// Avg_Quotes_Per_Rep solo cuenta reps activos\nsummary.Avg_Quotes_Per_Rep = reps.length\n  ? Number((activeQuotesCount / reps.length).toFixed(2))\n  : 0;\n\nconst rankedByQuotes = [...byRepRows].sort((a, b) => {\n  if (b.Quotes !== a.Quotes) return b.Quotes - a.Quotes;\n  return a.Rep.localeCompare(b.Rep);\n});\n\nsummary.Top_Rep_By_Quotes = rankedByQuotes[0]?.Rep ?? '';\nsummary.Top_Rep_Quote_Count = rankedByQuotes[0]?.Quotes ?? 0;\n\nconst repsWithResponse = byRepRows\n  .map(r => ({ ...r, _minNum: parseFloat(r.Avg_Response_Min) }))\n  .filter(r => Number.isFinite(r._minNum) && r._minNum > 0)\n  .sort((a, b) => {\n    if (a._minNum !== b._minNum) return a._minNum - b._minNum;\n    return a.Rep.localeCompare(b.Rep);\n  });\n\nsummary.Fastest_Rep = repsWithResponse[0]?.Rep ?? '';\nsummary.Fastest_Rep_Avg_Min = repsWithResponse[0]?.Avg_Response_Min ?? '0 min';\nsummary.Fastest_Rep_Avg_Time = repsWithResponse[0]?.Avg_Response_Time ?? '';\n\n// --- Daily Quotes (solo reps activos) ---\nconst dailyRows = [];\nconst dates = [];\n\nconst cursor = new Date(weekStart);\nwhile (cursor <= weekEnd) {\n  dates.push(formatDateKey(cursor));\n  cursor.setDate(cursor.getDate() + 1);\n}\n\nfor (const rep of reps) {\n  const row = { Rep: rep };\n  let total = 0;\n\n  for (const d of dates) {\n    const value = Number(dailyQuotesMap[rep]?.[d] ?? 0);\n    row[d] = value;\n    total += value;\n  }\n\n  row.Total = total;\n  dailyRows.push(row);\n}\n\nreturn [\n  { json: { sheet: 'Dashboard_Summary', data: [summary] } },\n  { json: { sheet: 'Weekly_By_Rep', data: byRepRows } },\n  { json: { sheet: 'Daily_Quotes', data: dailyRows } },\n];"
+      },
+      "id": "461f2193-7fb1-49f9-9fbe-c6ec29072986",
+      "name": "Code - Weekly Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3760,
+        3360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $('Airtable - Monthly Deals').all();\nconst activeRepItems = $('Airtable - Active Reps').all();\n\n// Reps excluidos del per-rep y rates, pero SI cuentan en volumen total\nconst EXCLUDED_REPS = ['Bradley Fry'];\n\nconst repIdToName = {};\nconst allRepNames = new Set();\nfor (const item of activeRepItems) {\n  const row = item.json.fields ?? item.json;\n  const fullName = String(row['Full Name'] ?? '').trim();\n  const recordId = item.json.id ?? '';\n  if (fullName) {\n    allRepNames.add(fullName);\n    if (recordId) repIdToName[recordId] = fullName;\n  }\n}\n\nconst activeRepNames = new Set([...allRepNames].filter(n => !EXCLUDED_REPS.includes(n)));\n\nconst CONFIG = {\n  createdField: 'Date Created',\n  repField: 'Sales',\n  stageField: 'Stage',\n  artworkField: 'LMT Art Sent To Customer (from Artwork)',\n};\n\nfunction resolveRep(value) {\n  if (Array.isArray(value)) {\n    return value.map(v => resolveRep(v)).flat().filter(Boolean);\n  }\n  let str = String(value ?? '').trim();\n  if (!str) return [];\n  str = str.replace(/^\\d+:/, '');\n  if (str.startsWith('rec') && repIdToName[str]) {\n    return [repIdToName[str]];\n  }\n  if (allRepNames.has(str)) {\n    return [str];\n  }\n  if (!str.startsWith('rec')) {\n    return [str];\n  }\n  return [];\n}\n\nfunction normalizeStage(value) {\n  if (Array.isArray(value)) return String(value[0] ?? '').trim();\n  return String(value ?? '').trim();\n}\n\nfunction formatPct(num, den) {\n  if (!den) return '0.00%';\n  return `${((num / den) * 100).toFixed(2)}%`;\n}\n\nconst now = new Date();\nconst monthLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;\n\nconst reps = Array.from(activeRepNames).sort((a, b) => a.localeCompare(b));\nconst byRep = {};\n\n// Volumen total (INCLUYE Bradley)\nlet displayTotalLeads = 0;\nlet displayTotalArtwork = 0;\nlet displayTotalClosedWon = 0;\n\nfor (const item of allItems) {\n  const row = item.json.fields ?? item.json;\n  const resolvedReps = resolveRep(row[CONFIG.repField]);\n  const rep = resolvedReps[0] ?? '';\n  if (!rep || !allRepNames.has(rep)) continue;\n\n  // Computar artwork y stage una sola vez\n  const artworkValue = row[CONFIG.artworkField];\n  const hasArtwork = Array.isArray(artworkValue)\n    ? artworkValue.length > 0\n    : (artworkValue !== null && artworkValue !== undefined && artworkValue !== '');\n  const stage = normalizeStage(row[CONFIG.stageField]);\n  const isClosedWon = stage === 'Closed Won';\n\n  // VOLUMEN total (incluye Bradley)\n  displayTotalLeads += 1;\n  if (hasArtwork) displayTotalArtwork += 1;\n  if (isClosedWon) displayTotalClosedWon += 1;\n\n  // PER-REP + RATES: solo reps activos (sin Bradley)\n  if (EXCLUDED_REPS.includes(rep)) continue;\n\n  if (!byRep[rep]) {\n    byRep[rep] = { total_leads: 0, artwork_reached: 0, closed_won: 0 };\n  }\n  byRep[rep].total_leads += 1;\n  if (hasArtwork) byRep[rep].artwork_reached += 1;\n  if (isClosedWon) byRep[rep].closed_won += 1;\n}\n\nconst monthlyByRepRows = reps.map((rep) => {\n  const d = byRep[rep] ?? { total_leads: 0, artwork_reached: 0, closed_won: 0 };\n  return {\n    Rep: rep,\n    Month: monthLabel,\n    Total_Leads: d.total_leads,\n    Artwork_Sent: d.artwork_reached,\n    Lead_to_Art_Pct: formatPct(d.artwork_reached, d.total_leads),\n    Closed_Won: d.closed_won,\n    Close_Rate_Pct: formatPct(d.closed_won, d.total_leads),\n    Last_Refresh: new Date().toISOString(),\n  };\n});\n\n// Subtotales solo de reps activos (para los rates del summary)\nconst activeTotalLeads = monthlyByRepRows.reduce((s, r) => s + r.Total_Leads, 0);\nconst activeTotalArtwork = monthlyByRepRows.reduce((s, r) => s + r.Artwork_Sent, 0);\nconst activeTotalClosedWon = monthlyByRepRows.reduce((s, r) => s + r.Closed_Won, 0);\n\nconst monthlySummary = {\n  Month: monthLabel,\n  'Total_Leads (with Bradley)': displayTotalLeads,                          // INCLUYE Bradley\n  'Total_Leads (Active Reps)': activeTotalLeads,                            // SIN Bradley\n  'Artwork_Sent (with Bradley)': displayTotalArtwork,                       // INCLUYE Bradley\n  'Artwork_Sent (Active Reps)': activeTotalArtwork,                         // SIN Bradley\n  Lead_to_Art_Pct: formatPct(activeTotalArtwork, activeTotalLeads),         // sin Bradley\n  'Total_Closed_Won (with Bradley)': displayTotalClosedWon,                 // INCLUYE Bradley\n  'Total_Closed_Won (Active Reps)': activeTotalClosedWon,                   // SIN Bradley\n  Close_Rate_Pct: formatPct(activeTotalClosedWon, activeTotalLeads),        // sin Bradley\n  Active_Reps: reps.length,\n  Last_Refresh: new Date().toISOString(),\n};\n\nreturn [\n  { json: { sheet: 'Monthly_Summary', data: [monthlySummary] } },\n  { json: { sheet: 'Monthly_By_Rep', data: monthlyByRepRows } },\n];"
+      },
+      "id": "b998cd15-5823-43d4-90ef-3b33bfda39ba",
+      "name": "Code - Monthly Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3760,
+        3872
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "9af763fb-807c-4b5e-a3df-57360dc964ae",
+      "name": "Split Out Summary",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -3232,
+        3104
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg",
+          "mode": "list",
+          "cachedResultName": "Dashboard v2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Summary",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit#gid=0"
+        },
+        "keepFirstRow": true
+      },
+      "id": "3d2397f8-09e0-4fc8-8ceb-30bc135e0ac8",
+      "name": "GS - Clear Summary",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2848,
+        3104
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg",
+          "mode": "list",
+          "cachedResultName": "Dashboard v2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Summary",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Week_Start",
+              "displayName": "Week_Start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Week_End",
+              "displayName": "Week_End",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total_Leads (with Bradley)",
+              "displayName": "Total_Leads (with Bradley)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total_Leads (Active Reps)",
+              "displayName": "Total_Leads (Active Reps)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total_Quotes (with Bradley)",
+              "displayName": "Total_Quotes (with Bradley)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total_Quotes (Active Reps)",
+              "displayName": "Total_Quotes (Active Reps)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Avg_Response_Min",
+              "displayName": "Avg_Response_Min",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Avg_Response_Time",
+              "displayName": "Avg_Response_Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Active_Reps",
+              "displayName": "Active_Reps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last_Refresh",
+              "displayName": "Last_Refresh",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Quote_Rate_Pct",
+              "displayName": "Quote_Rate_Pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Avg_Quotes_Per_Rep",
+              "displayName": "Avg_Quotes_Per_Rep",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Top_Rep_By_Quotes",
+              "displayName": "Top_Rep_By_Quotes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Top_Rep_Quote_Count",
+              "displayName": "Top_Rep_Quote_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fastest_Rep",
+              "displayName": "Fastest_Rep",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fastest_Rep_Avg_Min",
+              "displayName": "Fastest_Rep_Avg_Min",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fastest_Rep_Avg_Time",
+              "displayName": "Fastest_Rep_Avg_Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "2a02ab9d-956e-4cac-8b68-6ed72c60b124",
+      "name": "GS - Append Summary",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2528,
+        3104
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.sheet }}",
+              "rightValue": "Weekly_By_Rep",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "faf07db9-5a3f-4130-b50d-e4a1a9544597",
+      "name": "IF - Is Weekly_By_Rep",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -3232,
+        3360
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "6b9e5c5f-4c5c-4c71-a5c5-c31fac26a83a",
+      "name": "Split Out Weekly By Rep",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -2528,
+        3344
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg",
+          "mode": "list",
+          "cachedResultName": "Dashboard v2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1446110870,
+          "mode": "list",
+          "cachedResultName": "Weekly_By_Rep",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit#gid=1446110870"
+        },
+        "keepFirstRow": true
+      },
+      "id": "df66f0af-c7df-422e-9ef6-602507523473",
+      "name": "GS - Clear Weekly By Rep",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2848,
+        3344
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg",
+          "mode": "list",
+          "cachedResultName": "Dashboard v2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1446110870,
+          "mode": "list",
+          "cachedResultName": "Weekly_By_Rep",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit#gid=1446110870"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Rep",
+              "displayName": "Rep",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Leads",
+              "displayName": "Leads",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Quotes",
+              "displayName": "Quotes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Avg_Response_Min",
+              "displayName": "Avg_Response_Min",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Avg_Response_Time",
+              "displayName": "Avg_Response_Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "b82768e5-d67d-4dfd-93bc-a6373da505fe",
+      "name": "GS - Append Weekly By Rep",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2192,
+        3344
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.sheet }}",
+              "rightValue": "Daily_Quotes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "14aed30b-7806-4194-bb2e-611e0deae465",
+      "name": "IF - Is Daily Quotes",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -3232,
+        3584
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "0c47bc33-36c9-4381-a0d9-bee1be2c4612",
+      "name": "Split Out Daily",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -2528,
+        3568
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg",
+          "mode": "list",
+          "cachedResultName": "Dashboard v2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1894035672,
+          "mode": "list",
+          "cachedResultName": "Daily_Quotes",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit#gid=1894035672"
+        }
+      },
+      "id": "e9505d7e-f4fa-435a-8efc-fa8f40d8bce3",
+      "name": "GS - Clear Daily",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2848,
+        3568
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg",
+          "mode": "list",
+          "cachedResultName": "Dashboard v2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1894035672,
+          "mode": "list",
+          "cachedResultName": "Daily_Quotes",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit#gid=1894035672"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "baa56722-3f07-49b6-8ae1-353773dd8584",
+      "name": "GS - Append Daily",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2192,
+        3568
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c3",
+              "leftValue": "={{ $json.sheet }}",
+              "rightValue": "Monthly_Summary",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fda72501-5cf1-4662-916b-fe18e3fed888",
+      "name": "IF - Is Monthly Summary",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -3232,
+        3776
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "3afc9204-00f6-48e0-a748-7f3e97447bd2",
+      "name": "Split Out Monthly Summary",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -2528,
+        3760
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg",
+          "mode": "list",
+          "cachedResultName": "Dashboard v2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 887828449,
+          "mode": "list",
+          "cachedResultName": "Monthly_Summary",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit#gid=887828449"
+        },
+        "keepFirstRow": true
+      },
+      "id": "8e31dd97-3ede-46ca-89fc-d8570f35dab0",
+      "name": "GS - Clear Monthly Summary",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2848,
+        3760
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg",
+          "mode": "list",
+          "cachedResultName": "Dashboard v2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 887828449,
+          "mode": "list",
+          "cachedResultName": "Monthly_Summary",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit#gid=887828449"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Month",
+              "displayName": "Month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total_Leads (with Bradley)",
+              "displayName": "Total_Leads (with Bradley)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total_Leads (Active Reps)",
+              "displayName": "Total_Leads (Active Reps)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Artwork_Sent (with Bradley)",
+              "displayName": "Artwork_Sent (with Bradley)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Artwork_Sent (Active Reps)",
+              "displayName": "Artwork_Sent (Active Reps)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Lead_to_Art_Pct",
+              "displayName": "Lead_to_Art_Pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total_Closed_Won (with Bradley)",
+              "displayName": "Total_Closed_Won (with Bradley)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total_Closed_Won (Active Reps)",
+              "displayName": "Total_Closed_Won (Active Reps)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Close_Rate_Pct",
+              "displayName": "Close_Rate_Pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Active_Reps",
+              "displayName": "Active_Reps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last_Refresh",
+              "displayName": "Last_Refresh",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "b0b53d8b-9f10-451e-a39e-b0fee831f7e2",
+      "name": "GS - Append Monthly Summary",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2192,
+        3760
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c4",
+              "leftValue": "={{ $json.sheet }}",
+              "rightValue": "Monthly_By_Rep",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "697722e7-6208-4e34-aeb2-b5fd9bb6d266",
+      "name": "IF - Is Monthly By Rep",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -3232,
+        3984
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "60cd80a7-f3a0-474b-8824-68e3fca941a9",
+      "name": "Split Out Monthly By Rep",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -2528,
+        3968
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg",
+          "mode": "list",
+          "cachedResultName": "Dashboard v2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1217189486,
+          "mode": "list",
+          "cachedResultName": "Monthly_By_Rep",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit#gid=1217189486"
+        },
+        "keepFirstRow": true
+      },
+      "id": "f107cdf2-60d0-49b3-8c02-c06f5dbad5b3",
+      "name": "GS - Clear Monthly By Rep",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2848,
+        3968
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg",
+          "mode": "list",
+          "cachedResultName": "Dashboard v2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1217189486,
+          "mode": "list",
+          "cachedResultName": "Monthly_By_Rep",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1n3BPm6ZdjIYGlGqZcpTPlX8jbRVc6_O01dTFo12ZbCg/edit#gid=1217189486"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Rep",
+              "displayName": "Rep",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Month",
+              "displayName": "Month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total_Leads",
+              "displayName": "Total_Leads",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Artwork_Sent",
+              "displayName": "Artwork_Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Lead_to_Art_Pct",
+              "displayName": "Lead_to_Art_Pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Closed_Won",
+              "displayName": "Closed_Won",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Close_Rate_Pct",
+              "displayName": "Close_Rate_Pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last_Refresh",
+              "displayName": "Last_Refresh",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4fae4405-aacc-4c7f-8ae0-f1cac37fc986",
+      "name": "GS - Append Monthly By Rep",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2192,
+        3968
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "app2W6skQHiZlFKje",
+          "mode": "list",
+          "cachedResultName": "PinProsPlus",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblUHX1eh4eWM6xKA",
+          "mode": "list",
+          "cachedResultName": "Team Members",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje/tblUHX1eh4eWM6xKA"
+        },
+        "filterByFormula": "=AND(FIND('Sales', ARRAYJOIN({Team})) > 0, {Status} = 'Active')",
+        "options": {}
+      },
+      "id": "f2c32504-a55a-45fc-81fd-c4f67a4c3cdc",
+      "name": "Airtable - Active Reps",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -4848,
+        3616
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "3iO8H3lXPGXKI1vj",
+          "name": "Airtable Personal Access Token OFFICIAL | For Old Bases"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Google Sheets batchUpdate formatting requests\nconst SHEET_GIDS = {\n  \"Hoja 1\": 0,\n  \"Weekly_By_Rep\": 1693801572,\n  \"Daily_Quotes\": 973934632,\n  \"Monthly_Summary\": 312312681,\n  \"Monthly_By_Rep\": 1362992793,\n};\nfunction rgb(r, g, b) {\n  return { red: r / 255, green: g / 255, blue: b / 255 };\n}\n// Color palette\nconst DARK_NAVY = rgb(26, 35, 55);\nconst MEDIUM_BLUE = rgb(55, 71, 103);\nconst ACCENT_BLUE = rgb(66, 133, 244);\nconst LIGHT_BG = rgb(245, 247, 250);\nconst WHITE = rgb(255, 255, 255);\nconst HEADER_TEXT = rgb(255, 255, 255);\nconst DARK_TEXT = rgb(33, 37, 41);\nconst SUBTLE_TEXT = rgb(108, 117, 125);\nconst SUCCESS_GREEN = rgb(40, 167, 69);\nconst SUCCESS_BG = rgb(232, 245, 233);\nconst WARNING_AMBER = rgb(255, 152, 0);\nconst WARNING_BG = rgb(255, 243, 224);\nconst BORDER_COLOR = rgb(218, 220, 224);\nconst ACCENT_TEAL = rgb(0, 150, 136);\nconst ACCENT_PURPLE = rgb(103, 58, 183);\nconst KPI_BG_1 = rgb(232, 240, 254);\nconst KPI_BG_2 = rgb(232, 245, 233);\nconst KPI_BG_3 = rgb(255, 243, 224);\nconst KPI_BG_4 = rgb(243, 229, 245);\n\n// --- Dynamic row counts based on active reps ---\nconst EXCLUDED_REPS = ['Bradley Fry'];\nconst activeRepItems = $('Airtable - Active Reps').all().filter(item => {\n  const row = item.json.fields ?? item.json;\n  const fullName = String(row['Full Name'] ?? '').trim();\n  return !EXCLUDED_REPS.includes(fullName);\n});\nconst activeRepCount = activeRepItems.length;\n\n// Header row is row 0, data starts at row 1\nconst dailyQuotesEndRow = activeRepCount + 1;\nconst weeklyByRepEndRow = activeRepCount + 1;\nconst monthlyByRepEndRow = activeRepCount + 1;\n\nconst requests = [];\n\n// Helper: format a header row\nfunction formatHeader(sheetId, row, endCol, bgColor) {\n  requests.push({\n    repeatCell: {\n      range: { sheetId, startRowIndex: row, endRowIndex: row + 1, startColumnIndex: 0, endColumnIndex: endCol },\n      cell: {\n        userEnteredFormat: {\n          backgroundColor: bgColor || DARK_NAVY,\n          textFormat: { foregroundColor: HEADER_TEXT, bold: true, fontSize: 10, fontFamily: 'Inter' },\n          horizontalAlignment: 'CENTER',\n          verticalAlignment: 'MIDDLE',\n          padding: { top: 6, bottom: 6, left: 8, right: 8 },\n        }\n      },\n      fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,padding)'\n    }\n  });\n}\n// Helper: alternate row colors\nfunction alternateRows(sheetId, startRow, endRow, endCol) {\n  for (let r = startRow; r < endRow; r++) {\n    const bg = (r - startRow) % 2 === 0 ? WHITE : LIGHT_BG;\n    requests.push({\n      repeatCell: {\n        range: { sheetId, startRowIndex: r, endRowIndex: r + 1, startColumnIndex: 0, endColumnIndex: endCol },\n        cell: {\n          userEnteredFormat: {\n            backgroundColor: bg,\n            textFormat: { foregroundColor: DARK_TEXT, fontSize: 10, fontFamily: 'Inter' },\n            verticalAlignment: 'MIDDLE',\n            padding: { top: 4, bottom: 4, left: 8, right: 8 },\n          }\n        },\n        fields: 'userEnteredFormat(backgroundColor,textFormat,verticalAlignment,padding)'\n      }\n    });\n  }\n}\n// Helper: add borders to a range\nfunction addBorders(sheetId, startRow, endRow, startCol, endCol) {\n  requests.push({\n    updateBorders: {\n      range: { sheetId, startRowIndex: startRow, endRowIndex: endRow, startColumnIndex: startCol, endColumnIndex: endCol },\n      top: { style: 'SOLID', width: 1, color: BORDER_COLOR },\n      bottom: { style: 'SOLID', width: 1, color: BORDER_COLOR },\n      left: { style: 'SOLID', width: 1, color: BORDER_COLOR },\n      right: { style: 'SOLID', width: 1, color: BORDER_COLOR },\n      innerHorizontal: { style: 'SOLID', width: 1, color: BORDER_COLOR },\n      innerVertical: { style: 'SOLID', width: 1, color: BORDER_COLOR },\n    }\n  });\n}\n// Helper: set column widths\nfunction setColWidth(sheetId, col, width) {\n  requests.push({\n    updateDimensionProperties: {\n      range: { sheetId, dimension: 'COLUMNS', startIndex: col, endIndex: col + 1 },\n      properties: { pixelSize: width },\n      fields: 'pixelSize'\n    }\n  });\n}\n// Helper: set row height\nfunction setRowHeight(sheetId, row, height) {\n  requests.push({\n    updateDimensionProperties: {\n      range: { sheetId, dimension: 'ROWS', startIndex: row, endIndex: row + 1 },\n      properties: { pixelSize: height },\n      fields: 'pixelSize'\n    }\n  });\n}\n// Helper: freeze rows\nfunction freezeRows(sheetId, numRows) {\n  requests.push({\n    updateSheetProperties: {\n      properties: { sheetId, gridProperties: { frozenRowCount: numRows } },\n      fields: 'gridProperties.frozenRowCount'\n    }\n  });\n}\n\n// ============================================================\n// SHEET 1: \"Hoja 1\" - Dashboard Summary\n// Orden esperado de columnas:\n//   0: Week_Start\n//   1: Week_End\n//   2: Total_Leads (with Bradley)\n//   3: Total_Leads (Active Reps)\n//   4: Total_Quotes (with Bradley)\n//   5: Total_Quotes (Active Reps)\n//   6: Quote_Rate_Pct\n//   7: Avg_Response_Min\n//   8: Avg_Response_Time\n//   9: Avg_Quotes_Per_Rep\n//  10: Top_Rep_By_Quotes\n//  11: Top_Rep_Quote_Count\n//  12: Fastest_Rep\n//  13: Fastest_Rep_Avg_Min\n//  14: Fastest_Rep_Avg_Time\n//  15: Active_Reps\n//  16: Last_Refresh\n// ============================================================\nconst s0 = SHEET_GIDS[\"Hoja 1\"];\nconst HOJA1_COLS = 17;\n\n[\n  120, // 0  Week_Start\n  120, // 1  Week_End\n  180, // 2  Total_Leads (with Bradley)\n  180, // 3  Total_Leads (Active Reps)\n  190, // 4  Total_Quotes (with Bradley)\n  190, // 5  Total_Quotes (Active Reps)\n  130, // 6  Quote_Rate_Pct\n  150, // 7  Avg_Response_Min\n  150, // 8  Avg_Response_Time\n  150, // 9  Avg_Quotes_Per_Rep\n  180, // 10 Top_Rep_By_Quotes\n  150, // 11 Top_Rep_Quote_Count\n  180, // 12 Fastest_Rep\n  150, // 13 Fastest_Rep_Avg_Min\n  150, // 14 Fastest_Rep_Avg_Time\n  110, // 15 Active_Reps\n  220, // 16 Last_Refresh\n].forEach((w, i) => setColWidth(s0, i, w));\n\n// Header row\nformatHeader(s0, 0, HOJA1_COLS);\nsetRowHeight(s0, 0, 40);\nfreezeRows(s0, 1);\n\n// Data row styling\nalternateRows(s0, 1, 2, HOJA1_COLS);\naddBorders(s0, 0, 2, 0, HOJA1_COLS);\n\n// Center align\nrequests.push({\n  repeatCell: {\n    range: { sheetId: s0, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 0, endColumnIndex: HOJA1_COLS },\n    cell: {\n      userEnteredFormat: {\n        horizontalAlignment: 'CENTER',\n        verticalAlignment: 'MIDDLE'\n      }\n    },\n    fields: 'userEnteredFormat(horizontalAlignment,verticalAlignment)'\n  }\n});\n\n// Number format: Avg_Quotes_Per_Rep (col 9) - decimal\nrequests.push({\n  repeatCell: {\n    range: { sheetId: s0, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 9, endColumnIndex: 10 },\n    cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '0.00' } } },\n    fields: 'userEnteredFormat.numberFormat'\n  }\n});\n\n// Integer format: Total_Leads x2, Total_Quotes x2, Top_Rep_Quote_Count, Active_Reps\n[2, 3, 4, 5, 8, 11].forEach((col) => {\n  requests.push({\n    repeatCell: {\n      range: { sheetId: s0, startRowIndex: 1, endRowIndex: 2, startColumnIndex: col, endColumnIndex: col + 1 },\n      cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '0' } } },\n      fields: 'userEnteredFormat.numberFormat'\n    }\n  });\n});\n\n\n// ============================================================\n// SHEET 2: Weekly_By_Rep\n// 0: Rep | 1: Leads | 2: Quotes | 3: Avg_Response_Min | 4: Avg_Response_Time\n// ============================================================\nconst s1 = SHEET_GIDS[\"Weekly_By_Rep\"];\n\n[180, 140, 140, 200, 200].forEach((w, i) => setColWidth(s1, i, w));\nformatHeader(s1, 0, 5, ACCENT_TEAL);\nsetRowHeight(s1, 0, 36);\nfreezeRows(s1, 1);\nalternateRows(s1, 1, weeklyByRepEndRow, 5);\naddBorders(s1, 0, weeklyByRepEndRow, 0, 5);\n\n// Bold the rep name column\nrequests.push({\n  repeatCell: {\n    range: { sheetId: s1, startRowIndex: 1, endRowIndex: weeklyByRepEndRow, startColumnIndex: 0, endColumnIndex: 1 },\n    cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: DARK_TEXT, fontSize: 10, fontFamily: 'Inter' } } },\n    fields: 'userEnteredFormat.textFormat'\n  }\n});\n\n// Integer format: Leads, Quotes\n[1, 2].forEach((col) => {\n  requests.push({\n    repeatCell: {\n      range: { sheetId: s1, startRowIndex: 1, endRowIndex: weeklyByRepEndRow, startColumnIndex: col, endColumnIndex: col + 1 },\n      cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '0' } } },\n      fields: 'userEnteredFormat.numberFormat'\n    }\n  });\n});\n\n// ============================================================\n// SHEET 3: Daily_Quotes (pivoted: Rep | Mon-Sun | Total)\n// ============================================================\nconst s2 = SHEET_GIDS[\"Daily_Quotes\"];\n\n[180, 100, 100, 100, 100, 100, 100, 100, 80].forEach((w, i) => setColWidth(s2, i, w));\nformatHeader(s2, 0, 9, MEDIUM_BLUE);\nsetRowHeight(s2, 0, 36);\nfreezeRows(s2, 1);\nalternateRows(s2, 1, dailyQuotesEndRow, 9);\naddBorders(s2, 0, dailyQuotesEndRow, 0, 9);\n\n// Bold rep names\nrequests.push({\n  repeatCell: {\n    range: { sheetId: s2, startRowIndex: 1, endRowIndex: dailyQuotesEndRow, startColumnIndex: 0, endColumnIndex: 1 },\n    cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: DARK_TEXT, fontSize: 10, fontFamily: 'Inter' } } },\n    fields: 'userEnteredFormat.textFormat'\n  }\n});\n\n// Total column - accent background\nrequests.push({\n  repeatCell: {\n    range: { sheetId: s2, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 8, endColumnIndex: 9 },\n    cell: {\n      userEnteredFormat: {\n        backgroundColor: WARNING_AMBER,\n        textFormat: { foregroundColor: WHITE, bold: true, fontSize: 10, fontFamily: 'Inter' },\n        horizontalAlignment: 'CENTER',\n      }\n    },\n    fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)'\n  }\n});\n\n// Total column data - light amber bg\nrequests.push({\n  repeatCell: {\n    range: { sheetId: s2, startRowIndex: 1, endRowIndex: dailyQuotesEndRow, startColumnIndex: 8, endColumnIndex: 9 },\n    cell: {\n      userEnteredFormat: {\n        backgroundColor: WARNING_BG,\n        textFormat: { bold: true, foregroundColor: DARK_TEXT, fontSize: 10, fontFamily: 'Inter' },\n        horizontalAlignment: 'CENTER',\n      }\n    },\n    fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)'\n  }\n});\n\n// Center-align all number columns\nrequests.push({\n  repeatCell: {\n    range: { sheetId: s2, startRowIndex: 1, endRowIndex: dailyQuotesEndRow, startColumnIndex: 1, endColumnIndex: 8 },\n    cell: { userEnteredFormat: { horizontalAlignment: 'CENTER' } },\n    fields: 'userEnteredFormat.horizontalAlignment'\n  }\n});\n\n// Force day columns + Total to whole numbers\nrequests.push({\n  repeatCell: {\n    range: { sheetId: s2, startRowIndex: 1, endRowIndex: dailyQuotesEndRow, startColumnIndex: 1, endColumnIndex: 9 },\n    cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '0' } } },\n    fields: 'userEnteredFormat.numberFormat'\n  }\n});\n\n// ============================================================\n// SHEET 4: Monthly_Summary\n// Orden esperado de columnas:\n//   0: Month\n//   1: Total_Leads (with Bradley)\n//   2: Total_Leads (Active Reps)\n//   3: Artwork_Sent (with Bradley)\n//   4: Artwork_Sent (Active Reps)\n//   5: Lead_to_Art_Pct\n//   6: Total_Closed_Won (with Bradley)\n//   7: Total_Closed_Won (Active Reps)\n//   8: Close_Rate_Pct\n//   9: Active_Reps\n//  10: Last_Refresh\n// ============================================================\nconst s3 = SHEET_GIDS[\"Monthly_Summary\"];\nconst MONTHLY_SUM_COLS = 11;\n\n[\n  120, // 0  Month\n  180, // 1  Total_Leads (with Bradley)\n  180, // 2  Total_Leads (Active Reps)\n  200, // 3  Artwork_Sent (with Bradley)\n  200, // 4  Artwork_Sent (Active Reps)\n  150, // 5  Lead_to_Art_Pct\n  220, // 6  Total_Closed_Won (with Bradley)\n  220, // 7  Total_Closed_Won (Active Reps)\n  150, // 8  Close_Rate_Pct\n  130, // 9  Active_Reps\n  220, // 10 Last_Refresh\n].forEach((w, i) => setColWidth(s3, i, w));\n\nformatHeader(s3, 0, MONTHLY_SUM_COLS, ACCENT_PURPLE);\nsetRowHeight(s3, 0, 36);\nalternateRows(s3, 1, 2, MONTHLY_SUM_COLS);\naddBorders(s3, 0, 2, 0, MONTHLY_SUM_COLS);\n\n// Integer format: Total_Leads x2, Artwork_Sent x2, Total_Closed_Won x2, Active_Reps\n[1, 2, 3, 4, 6, 7, 9].forEach((col) => {\n  requests.push({\n    repeatCell: {\n      range: { sheetId: s3, startRowIndex: 1, endRowIndex: 2, startColumnIndex: col, endColumnIndex: col + 1 },\n      cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '0' } } },\n      fields: 'userEnteredFormat.numberFormat'\n    }\n  });\n});\n\n// ============================================================\n// SHEET 5: Monthly_By_Rep\n// 0: Rep | 1: Month | 2: Total_Leads | 3: Artwork_Sent |\n// 4: Lead_to_Art_Pct | 5: Closed_Won | 6: Close_Rate_Pct | 7: Last_Refresh\n// ============================================================\nconst s4 = SHEET_GIDS[\"Monthly_By_Rep\"];\n\n[180, 120, 140, 160, 180, 140, 200, 200].forEach((w, i) => setColWidth(s4, i, w));\nformatHeader(s4, 0, 8, ACCENT_PURPLE);\nsetRowHeight(s4, 0, 36);\nfreezeRows(s4, 1);\nalternateRows(s4, 1, monthlyByRepEndRow, 8);\naddBorders(s4, 0, monthlyByRepEndRow, 0, 8);\n\n// Bold rep name column\nrequests.push({\n  repeatCell: {\n    range: { sheetId: s4, startRowIndex: 1, endRowIndex: monthlyByRepEndRow, startColumnIndex: 0, endColumnIndex: 1 },\n    cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: DARK_TEXT, fontSize: 10, fontFamily: 'Inter' } } },\n    fields: 'userEnteredFormat.textFormat'\n  }\n});\n\n// Integer format: Total_Leads, Artwork_Sent, Closed_Won\n[2, 3, 5].forEach((col) => {\n  requests.push({\n    repeatCell: {\n      range: { sheetId: s4, startRowIndex: 1, endRowIndex: monthlyByRepEndRow, startColumnIndex: col, endColumnIndex: col + 1 },\n      cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '0' } } },\n      fields: 'userEnteredFormat.numberFormat'\n    }\n  });\n});\n\nreturn [{ json: { requests } }];"
+      },
+      "id": "370a5697-26cc-4aba-b409-3cb1ebbbc8ea",
+      "name": "Code - Build Format Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2192,
+        3104
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/1_3rRsnji8Qfb9HiJUxYvqGBV4F9iDyuJ9kXVLry_CE8:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requests: $json.requests }) }}",
+        "options": {}
+      },
+      "id": "0a91369e-48d8-4ef0-adfa-9b04db507074",
+      "name": "GS - Apply Formatting",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1840,
+        3104
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "DjN8E9DxhmlFVit0",
+          "name": "PinProsPlus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "718faf61-8256-4214-aebd-bf59299fc50b",
+              "leftValue": "={{ $json.sheet }}",
+              "rightValue": "Dashboard_Summary",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3504,
+        3120
+      ],
+      "id": "86a8f552-5e24-4cb8-b940-d24237e9ee17",
+      "name": "IF - Is Dashboard Summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "function getStartOfWeekMonday(date) {\n  const d = new Date(date);\n  const day = d.getDay();\n  const diff = day === 0 ? -6 : 1 - day;\n  d.setHours(0, 0, 0, 0);\n  d.setDate(d.getDate() + diff);\n  return d;\n}\n\nfunction getEndOfWeekSunday(date) {\n  const start = getStartOfWeekMonday(date);\n  const end = new Date(start);\n  end.setDate(end.getDate() + 6);\n  end.setHours(23, 59, 59, 999);\n  return end;\n}\n\nfunction formatDateYMD(date) {\n  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;\n}\n\nconst now = new Date();\nconst weekStart = getStartOfWeekMonday(now);\nconst weekEnd = getEndOfWeekSunday(now);\n\nreturn {\n  weekStartDate: formatDateYMD(weekStart),\n  weekEndDate: formatDateYMD(weekEnd),\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4384,
+        3360
+      ],
+      "id": "cadd7288-dbc4-4d20-ad0b-e40b966ee6f9",
+      "name": "Calculate Week Dates"
+    },
+    {
+      "parameters": {
+        "jsCode": "function getStartOfMonth(date) {\n  const d = new Date(date);\n  d.setDate(1);\n  d.setHours(0, 0, 0, 0);\n  return d;\n}\n\nfunction getEndOfMonth(date) {\n  const d = new Date(date);\n  // Día 0 del mes siguiente = último día del mes actual\n  d.setMonth(d.getMonth() + 1, 0);\n  d.setHours(23, 59, 59, 999);\n  return d;\n}\n\nfunction formatDateYMD(date) {\n  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;\n}\n\nconst now = new Date();\nconst monthStart = getStartOfMonth(now);\nconst monthEnd = getEndOfMonth(now);\n\nreturn {\n  monthStartDate: formatDateYMD(monthStart),\n  monthEndDate: formatDateYMD(monthEnd),\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4368,
+        3872
+      ],
+      "id": "725dd6cf-0f5a-44b0-bf02-8a1f00e3335a",
+      "name": "Calculate Month Dates"
+    },
+    {
+      "id": "8d51fbb7-c608-4d9a-8e8e-12b5f828db9f",
+      "name": "Webhook - Refresh",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -5416,
+        3416
+      ],
+      "webhookId": "3924216a-82b2-44fc-80e7-1d9139896dc5",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dashboard-refresh",
+        "responseMode": "lastNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Airtable - Active Reps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable - Weekly Deals": {
+      "main": [
+        [
+          {
+            "node": "Code - Weekly Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable - Monthly Deals": {
+      "main": [
+        [
+          {
+            "node": "Code - Monthly Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Weekly Metrics": {
+      "main": [
+        [
+          {
+            "node": "IF - Is Weekly_By_Rep",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF - Is Daily Quotes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF - Is Dashboard Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Monthly Metrics": {
+      "main": [
+        [
+          {
+            "node": "IF - Is Monthly Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF - Is Monthly By Rep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Summary": {
+      "main": [
+        [
+          {
+            "node": "GS - Clear Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS - Clear Summary": {
+      "main": [
+        [
+          {
+            "node": "GS - Append Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Is Weekly_By_Rep": {
+      "main": [
+        [
+          {
+            "node": "GS - Clear Weekly By Rep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS - Clear Weekly By Rep": {
+      "main": [
+        [
+          {
+            "node": "Split Out Weekly By Rep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Weekly By Rep": {
+      "main": [
+        [
+          {
+            "node": "GS - Append Weekly By Rep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Is Daily Quotes": {
+      "main": [
+        [
+          {
+            "node": "GS - Clear Daily",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS - Clear Daily": {
+      "main": [
+        [
+          {
+            "node": "Split Out Daily",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Daily": {
+      "main": [
+        [
+          {
+            "node": "GS - Append Daily",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Is Monthly Summary": {
+      "main": [
+        [
+          {
+            "node": "GS - Clear Monthly Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS - Clear Monthly Summary": {
+      "main": [
+        [
+          {
+            "node": "Split Out Monthly Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Monthly Summary": {
+      "main": [
+        [
+          {
+            "node": "GS - Append Monthly Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Is Monthly By Rep": {
+      "main": [
+        [
+          {
+            "node": "GS - Clear Monthly By Rep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS - Clear Monthly By Rep": {
+      "main": [
+        [
+          {
+            "node": "Split Out Monthly By Rep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Monthly By Rep": {
+      "main": [
+        [
+          {
+            "node": "GS - Append Monthly By Rep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable - Active Reps": {
+      "main": [
+        [
+          {
+            "node": "Calculate Week Dates",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate Month Dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS - Append Summary": {
+      "main": [
+        [
+          {
+            "node": "Code - Build Format Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Build Format Requests": {
+      "main": [
+        [
+          {
+            "node": "GS - Apply Formatting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Is Dashboard Summary": {
+      "main": [
+        [
+          {
+            "node": "Split Out Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Week Dates": {
+      "main": [
+        [
+          {
+            "node": "Airtable - Weekly Deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Month Dates": {
+      "main": [
+        [
+          {
+            "node": "Airtable - Monthly Deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Refresh": {
+      "main": [
+        [
+          {
+            "node": "Airtable - Active Reps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timezone": "America/Denver"
+  },
+  "versionId": "ad438016-c031-459f-8c7b-087dc40bf3a6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a6a948b30bf243e3533261c54208a8a7852d7a26516cd35b70d459282d4507b"
+  },
+  "id": "70MVwmvkSatgHmPD",
+  "tags": []
+}

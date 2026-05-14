@@ -408,8 +408,9 @@
      - 1 cache global compartida entre usuarios
      - No expone la URL del webhook n8n al browser
    ============================================================ */
-const API_URL     = "/api/dashboard";       // edge function (cachea)
-const BUSINESS_TZ = "America/Denver";
+const API_URL          = "/api/dashboard";           // custom mode → webhook v4.1 (live compute)
+const API_URL_DEFAULT  = "/api/dashboard-default";   // default mode → Google Sheet + trigger v3
+const BUSINESS_TZ      = "America/Denver";
 
 /* ============================================================
    CHART DEFAULTS
@@ -810,7 +811,16 @@ function renderFunnel(canvasId, leads, artwork, closed) {
 }
 
 /* ============================================================
-   LOAD: default mode (week + month in parallel)
+   LOAD: default mode → /api/dashboard-default
+   ============================================================
+   Esta llamada al edge function:
+     1. Dispara el workflow v3 (refresca Google Sheet) y espera.
+     2. Lee las 5 tabs del sheet.
+     3. Devuelve un único JSON {summary, byRep, daily, monthlySummary, monthlyByRep}.
+   Como ambas secciones (week + month) salen del mismo response,
+   asignamos el MISMO objeto a state.weekData y state.monthData.
+   El "range" de cada sección lo derivamos de los campos del propio sheet
+   (Week_Start/Week_End y Month) porque v3 ya calculó esos límites.
    ============================================================ */
 async function loadDefault() {
   const btn = $('#filterBtn');
@@ -820,35 +830,62 @@ async function loadDefault() {
   document.body.classList.remove('mode-custom');
   document.body.classList.add('mode-default');
   state.mode = 'default';
-  $('#heroSubLabel').textContent = 'PinProsPlus · Vista por defecto';
-
-  const week  = currentWeekRange(BUSINESS_TZ);
-  const month = currentMonthRange(BUSINESS_TZ);
-  state.weekRange  = week;
-  state.monthRange = month;
+  $('#heroSubLabel').textContent = 'PinProsPlus · Vista por defecto · Refrescando sheet…';
 
   try {
-    const [weekData, monthData] = await Promise.all([
-      fetchWebhook(week.from,  week.to),
-      fetchWebhook(month.from, month.to)
-    ]);
-    state.weekData  = weekData;
-    state.monthData = monthData;
+    const res = await fetch(API_URL_DEFAULT, { method: 'GET', headers: { 'Accept': 'application/json' } });
+    if (!res.ok) {
+      let detail = ''; try { detail = (await res.json()).error || ''; } catch (_) {}
+      throw new Error(`HTTP ${res.status}${detail ? ` — ${detail}` : ''}`);
+    }
+    const data = await res.json();
+
+    // Misma data, dos punteros (week section usa summary/byRep/daily, month usa monthlySummary/monthlyByRep)
+    state.weekData  = data;
+    state.monthData = data;
+
+    // Derivar ranges de los campos del sheet (no recomputamos en el cliente)
+    state.weekRange = {
+      from: data.summary?.Week_Start || '',
+      to:   data.summary?.Week_End   || '',
+    };
+    // Monthly_Summary tiene Month como "2026-05" → convertimos a from/to del mes calendario
+    const monthLbl = String(data.monthlySummary?.Month || '');
+    state.monthRange = monthLabelToRange(monthLbl);
+
     renderWeek();
     renderMonth();
+
+    const refresh = data._meta?.refresh;
+    const refreshNote = refresh && !refresh.skipped
+      ? ` · v3 refresh ${refresh.ok ? 'OK' : 'falló'} (${refresh.elapsed_ms}ms)`
+      : '';
     $('#lastRefresh').textContent = new Date().toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
-    showToast('✓ Vista default cargada', 'success');
+    $('#heroSubLabel').textContent = `PinProsPlus · Vista por defecto · Source: Google Sheet${refreshNote}`;
+    showToast('✓ Datos cargados desde sheet', 'success');
   } catch (e) {
     console.error(e);
-    showToast('Error cargando datos. Revisá el webhook.', 'error');
+    $('#heroSubLabel').textContent = 'PinProsPlus · Vista por defecto · Error';
+    showToast('Error: ' + e.message, 'error');
   } finally {
     btn.classList.remove('loading');
     btn.disabled = false;
   }
 }
 
+// "2026-05" → {from:'2026-05-01', to:'2026-05-31'}; tolerante a otros formatos
+function monthLabelToRange(label) {
+  const m = label.match(/^(\d{4})-(\d{2})/);
+  if (!m) return { from: '', to: '' };
+  const y = +m[1], mm = +m[2];
+  const first = `${y}-${String(mm).padStart(2,'0')}-01`;
+  const lastDate = new Date(Date.UTC(y, mm, 0));
+  const last = `${lastDate.getUTCFullYear()}-${String(lastDate.getUTCMonth()+1).padStart(2,'0')}-${String(lastDate.getUTCDate()).padStart(2,'0')}`;
+  return { from: first, to: last };
+}
+
 /* ============================================================
-   LOAD: custom mode (user range)
+   LOAD: custom mode (user range) — sigue usando webhook v4.1 vía /api/dashboard
    ============================================================ */
 async function loadCustom(dateFrom, dateTo) {
   const btn = $('#filterBtn');
@@ -868,7 +905,7 @@ async function loadCustom(dateFrom, dateTo) {
     showToast(`✓ Período ${formatRangeShort(dateFrom, dateTo)} cargado`, 'success');
   } catch (e) {
     console.error(e);
-    showToast('Error cargando datos. Revisá las fechas y el webhook.', 'error');
+    showToast('Error: ' + e.message, 'error');
   } finally {
     btn.classList.remove('loading');
     btn.disabled = false;
@@ -888,4 +925,14 @@ $('#filterBtn').addEventListener('click', () => {
 
 $('#backBtn').addEventListener('click', () => {
   $('#dateFrom').value = '';
-  
+  $('#dateTo').value   = '';
+  loadDefault();
+});
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+loadDefault();
+</script>
+</body>
+</html>
