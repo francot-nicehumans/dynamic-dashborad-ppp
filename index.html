@@ -400,9 +400,16 @@
 <script>
 /* ============================================================
    CONFIG
+   ============================================================
+   Same-origin GET a /api/dashboard (Vercel Edge Function).
+   La edge function cachea respuestas por URL (s-maxage=600s) y
+   proxea el POST al webhook n8n internamente. Beneficios:
+     - <100ms en cache hit (vs ~2.5s al webhook directo)
+     - 1 cache global compartida entre usuarios
+     - No expone la URL del webhook n8n al browser
    ============================================================ */
-const N8N_WEBHOOK_URL = "https://api.pinprosplus.com/webhook/dashboard";
-const BUSINESS_TZ     = "America/Denver";
+const API_URL     = "/api/dashboard";       // edge function (cachea)
+const BUSINESS_TZ = "America/Denver";
 
 /* ============================================================
    CHART DEFAULTS
@@ -506,15 +513,19 @@ function currentMonthRange(tz) {
 }
 
 /* ============================================================
-   FETCH (single call)
+   FETCH (single call) — GET para que el edge cache funcione
    ============================================================ */
 async function fetchWebhook(dateFrom, dateTo) {
-  const res = await fetch(N8N_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dateFrom, dateTo, tz: BUSINESS_TZ })
+  const qs = new URLSearchParams({ dateFrom, dateTo, tz: BUSINESS_TZ });
+  const res = await fetch(`${API_URL}?${qs}`, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    let detail = '';
+    try { const e = await res.json(); detail = e.error || ''; } catch (_) {}
+    throw new Error(`HTTP ${res.status}${detail ? ` — ${detail}` : ''}`);
+  }
   return res.json();
 }
 
@@ -877,21 +888,4 @@ $('#filterBtn').addEventListener('click', () => {
 
 $('#backBtn').addEventListener('click', () => {
   $('#dateFrom').value = '';
-  $('#dateTo').value   = '';
-  loadDefault();
-});
-
-/* ============================================================
-   BOOT
-   ============================================================ */
-// Mostrar el rango Mon-Sun y mes en los date inputs como hint visual
-const _week  = currentWeekRange(BUSINESS_TZ);
-const _month = currentMonthRange(BUSINESS_TZ);
-$('#dateFrom').min = '2020-01-01';
-$('#dateTo').max   = _month.to;  // no permitir fechas futuras del mes calendario
-// dejamos los inputs vacíos por default — significa "modo default"
-
-loadDefault();
-</script>
-</body>
-</html>
+  
