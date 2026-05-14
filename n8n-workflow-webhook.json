@@ -1,0 +1,329 @@
+{
+  "name": "PPP - Dashboard Webhook v4 (Denver TZ)",
+  "nodes": [
+    {
+      "id": "91bd726c-abc2-4024-9648-1a35fe58b3ba",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -4800,
+        3200
+      ],
+      "webhookId": "fbcc1376-6723-47bd-a262-ba71e03ca0af",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dashboard",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "app2W6skQHiZlFKje",
+          "mode": "list",
+          "cachedResultName": "PinProsPlus",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblUHX1eh4eWM6xKA",
+          "mode": "list",
+          "cachedResultName": "Team Members",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje/tblUHX1eh4eWM6xKA"
+        },
+        "filterByFormula": "=AND(FIND('Sales', ARRAYJOIN({Team})) > 0, {Status} = 'Active')",
+        "options": {}
+      },
+      "id": "f2c32504-a55a-45fc-81fd-c4f67a4c3cdc",
+      "name": "Airtable - Active Reps",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -4400,
+        3200
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "3iO8H3lXPGXKI1vj",
+          "name": "Airtable Personal Access Token OFFICIAL | For Old Bases"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "app2W6skQHiZlFKje",
+          "mode": "list",
+          "cachedResultName": "PinProsPlus",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblmR6MdAwZgloZzl",
+          "mode": "list",
+          "cachedResultName": "Deals",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje/tblmR6MdAwZgloZzl"
+        },
+        "filterByFormula": "=AND(IS_AFTER(DATETIME_FORMAT(SET_TIMEZONE({Date Created}, '{{ $('Webhook').first().json.tz }}'), 'YYYY-MM-DD'),DATEADD('{{ $('Webhook').first().json.dateFrom }}', -1, 'days')),IS_BEFORE(DATETIME_FORMAT(SET_TIMEZONE({Date Created}, '{{ $('Webhook').first().json.tz }}'), 'YYYY-MM-DD'),DATEADD('{{ $('Webhook').first().json.dateTo }}', 1, 'days')))",
+        "options": {},
+        "sort": {
+          "property": [
+            {
+              "field": "Date Created"
+            }
+          ]
+        }
+      },
+      "id": "e23601ec-d40e-4c5f-8c50-399869b4f087",
+      "name": "Airtable - Weekly Deals",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -4000,
+        3000
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "3iO8H3lXPGXKI1vj",
+          "name": "Airtable Personal Access Token OFFICIAL | For Old Bases"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "app2W6skQHiZlFKje",
+          "mode": "list",
+          "cachedResultName": "PinProsPlus",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblmR6MdAwZgloZzl",
+          "mode": "list",
+          "cachedResultName": "Deals",
+          "cachedResultUrl": "https://airtable.com/app2W6skQHiZlFKje/tblmR6MdAwZgloZzl"
+        },
+        "filterByFormula": "=AND(IS_AFTER(DATETIME_FORMAT(SET_TIMEZONE({Date Created}, '{{ $('Webhook').first().json.tz }}'), 'YYYY-MM-DD'),DATEADD('{{ $('Webhook').first().json.dateFrom }}', -1, 'days')),IS_BEFORE(DATETIME_FORMAT(SET_TIMEZONE({Date Created}, '{{ $('Webhook').first().json.tz }}'), 'YYYY-MM-DD'),DATEADD('{{ $('Webhook').first().json.dateTo }}', 1, 'days')))",
+        "options": {}
+      },
+      "id": "b46fd2b3-85e2-4951-87da-f5b5b31af6b3",
+      "name": "Airtable - Monthly Deals",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -4000,
+        3400
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "3iO8H3lXPGXKI1vj",
+          "name": "Airtable Personal Access Token OFFICIAL | For Old Bases"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// WEEKLY METRICS - webhook + Luxon, devuelve UN solo item\n// ============================================================\nconst { DateTime } = require('luxon');\n\nconst weeklyItems    = $('Airtable - Weekly Deals').all();\nconst activeRepItems = $('Airtable - Active Reps').all();\nconst payload        = $('Webhook').first().json;\n\nconst TZ       = payload.tz       || 'America/Denver';\nconst dateFrom = payload.dateFrom;\nconst dateTo   = payload.dateTo;\n\nconst EXCLUDED_REPS = ['Bradley Fry'];\n\nconst repIdToName = {};\nconst allRepNames = new Set();\nfor (const item of activeRepItems) {\n  const row = item.json.fields ?? item.json;\n  const fullName = String(row['Full Name'] ?? '').trim();\n  const recordId = item.json.id ?? '';\n  if (fullName) {\n    allRepNames.add(fullName);\n    if (recordId) repIdToName[recordId] = fullName;\n  }\n}\nconst activeRepNames = new Set([...allRepNames].filter(n => !EXCLUDED_REPS.includes(n)));\n\nconst CONFIG = {\n  createdField:  'Date Created',\n  minutesField:  'Lead to Quote (Minutes) During Business Hours',\n  repField:      'Sales',\n  stageField:    'Stage',\n};\n\nfunction resolveRep(value) {\n  if (Array.isArray(value)) return value.map(v => resolveRep(v)).flat().filter(Boolean);\n  let str = String(value ?? '').trim();\n  if (!str) return [];\n  str = str.replace(/^\\d+:/, '');\n  if (str.startsWith('rec') && repIdToName[str]) return [repIdToName[str]];\n  if (allRepNames.has(str)) return [str];\n  if (!str.startsWith('rec')) return [str];\n  return [];\n}\nfunction normalizeStage(v) {\n  if (Array.isArray(v)) return String(v[0] ?? '').trim();\n  return String(v ?? '').trim();\n}\nfunction toNumber(v) {\n  if (v === null || v === undefined || v === '') return null;\n  if (Array.isArray(v)) { if (v.length === 0) return null; v = v[0]; }\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n}\nfunction formatHours(minutes) {\n  if (minutes === null || minutes === undefined || !Number.isFinite(minutes)) return '';\n  const total = Math.round(minutes);\n  const days  = Math.floor(total / 1440);\n  const hours = Math.floor((total % 1440) / 60);\n  const mins  = total % 60;\n  const parts = [];\n  if (days) parts.push(`${days}d`);\n  if (hours || days) parts.push(`${hours}h`);\n  parts.push(`${mins}m`);\n  return parts.join(' ');\n}\nfunction dayKeyInTz(isoOrEpoch) {\n  return DateTime.fromISO(String(isoOrEpoch), { zone: 'utc' }).setZone(TZ).toFormat('yyyy-LL-dd');\n}\nfunction isWithinRange(isoOrEpoch) {\n  const d = DateTime.fromISO(String(isoOrEpoch), { zone: 'utc' }).setZone(TZ);\n  const start = DateTime.fromISO(dateFrom, { zone: TZ }).startOf('day');\n  const end   = DateTime.fromISO(dateTo,   { zone: TZ }).endOf('day');\n  return d >= start && d <= end;\n}\n\nconst reps = Array.from(activeRepNames).sort((a, b) => a.localeCompare(b));\nconst weeklyRecords = [];\nconst seenIds = new Set();\n\nfor (const item of weeklyItems) {\n  const id = item.json.id ?? '';\n  if (id && seenIds.has(id)) continue;\n  if (id) seenIds.add(id);\n\n  const row = item.json.fields ?? item.json;\n  const created = row[CONFIG.createdField];\n  if (!created || !isWithinRange(created)) continue;\n\n  weeklyRecords.push({\n    created,\n    createdDateKey: dayKeyInTz(created),\n    minutes:        toNumber(row[CONFIG.minutesField]),\n    rep:            (resolveRep(row[CONFIG.repField])[0] ?? ''),\n    stage:          normalizeStage(row[CONFIG.stageField]),\n    lmtQuoteStage:  row['LMT - Quote Stage (For Follow Up)'],\n  });\n}\n\nconst summary = {\n  Week_Start: dateFrom,\n  Week_End:   dateTo,\n  'Total_Leads (with Bradley)':  0,\n  'Total_Leads (Active Reps)':   0,\n  'Total_Quotes (with Bradley)': 0,\n  'Total_Quotes (Active Reps)': 0,\n  Avg_Response_Min: 0,\n  Avg_Response_Time: '0m',\n  Active_Reps: reps.length,\n  Last_Refresh: DateTime.now().setZone(TZ).toISO(),\n};\n\nlet activeLeadsCount  = 0;\nlet activeQuotesCount = 0;\nconst byRep = {};\nconst dailyQuotesMap = {};\nfor (const rep of reps) {\n  byRep[rep] = { Rep: rep, Leads: 0, Quotes: 0, total_quote_minutes: 0, quote_time_count: 0, Avg_Response_Min: '0 min', Avg_Response_Time: '0m' };\n}\n\nfor (const row of weeklyRecords) {\n  if (!row.rep || !allRepNames.has(row.rep)) continue;\n  summary['Total_Leads (with Bradley)'] += 1;\n  if (row.lmtQuoteStage) summary['Total_Quotes (with Bradley)'] += 1;\n  if (EXCLUDED_REPS.includes(row.rep)) continue;\n\n  if (!dailyQuotesMap[row.rep]) dailyQuotesMap[row.rep] = {};\n  if (!dailyQuotesMap[row.rep][row.createdDateKey]) dailyQuotesMap[row.rep][row.createdDateKey] = 0;\n\n  byRep[row.rep].Leads += 1;\n  activeLeadsCount += 1;\n  if (row.lmtQuoteStage) {\n    byRep[row.rep].Quotes += 1;\n    activeQuotesCount += 1;\n    dailyQuotesMap[row.rep][row.createdDateKey] += 1;\n  }\n  if (row.lmtQuoteStage && row.minutes !== null && row.minutes > 0) {\n    byRep[row.rep].total_quote_minutes += row.minutes;\n    byRep[row.rep].quote_time_count += 1;\n    summary.Avg_Response_Min += row.minutes;\n  }\n}\n\nlet overallQuoteTimeCount = 0;\nconst byRepRows = Object.values(byRep).map((r) => {\n  if (r.quote_time_count > 0) {\n    const avgMin = Number((r.total_quote_minutes / r.quote_time_count).toFixed(2));\n    r.Avg_Response_Time = formatHours(avgMin);\n    r.Avg_Response_Min  = `${avgMin.toFixed(2)} min`;\n    overallQuoteTimeCount += r.quote_time_count;\n  }\n  delete r.total_quote_minutes;\n  delete r.quote_time_count;\n  return r;\n});\n\nlet summaryAvgMin = 0;\nif (overallQuoteTimeCount > 0) summaryAvgMin = Number((summary.Avg_Response_Min / overallQuoteTimeCount).toFixed(2));\nsummary.Avg_Response_Time = formatHours(summaryAvgMin);\nsummary.Avg_Response_Min  = `${summaryAvgMin.toFixed(2)} min`;\nsummary['Total_Leads (Active Reps)']  = activeLeadsCount;\nsummary['Total_Quotes (Active Reps)'] = activeQuotesCount;\nsummary.Quote_Rate_Pct     = activeLeadsCount ? `${((activeQuotesCount / activeLeadsCount) * 100).toFixed(2)}%` : '0%';\nsummary.Avg_Quotes_Per_Rep = reps.length ? Number((activeQuotesCount / reps.length).toFixed(2)) : 0;\n\nconst rankedByQuotes = [...byRepRows].sort((a, b) => (b.Quotes !== a.Quotes) ? b.Quotes - a.Quotes : a.Rep.localeCompare(b.Rep));\nsummary.Top_Rep_By_Quotes   = rankedByQuotes[0]?.Rep ?? '';\nsummary.Top_Rep_Quote_Count = rankedByQuotes[0]?.Quotes ?? 0;\n\nconst repsWithResponse = byRepRows\n  .map(r => ({ ...r, _minNum: parseFloat(r.Avg_Response_Min) }))\n  .filter(r => Number.isFinite(r._minNum) && r._minNum > 0)\n  .sort((a, b) => (a._minNum !== b._minNum) ? a._minNum - b._minNum : a.Rep.localeCompare(b.Rep));\nsummary.Fastest_Rep          = repsWithResponse[0]?.Rep ?? '';\nsummary.Fastest_Rep_Avg_Min  = repsWithResponse[0]?.Avg_Response_Min ?? '0 min';\nsummary.Fastest_Rep_Avg_Time = repsWithResponse[0]?.Avg_Response_Time ?? '';\n\nconst dailyRows = [];\nconst dates = [];\nlet cursor = DateTime.fromISO(dateFrom, { zone: TZ }).startOf('day');\nconst stop = DateTime.fromISO(dateTo,   { zone: TZ }).startOf('day');\nwhile (cursor <= stop) {\n  dates.push(cursor.toFormat('yyyy-LL-dd'));\n  cursor = cursor.plus({ days: 1 });\n}\nfor (const rep of reps) {\n  const row = { Rep: rep };\n  let total = 0;\n  for (const d of dates) {\n    const v = Number(dailyQuotesMap[rep]?.[d] ?? 0);\n    row[d] = v;\n    total += v;\n  }\n  row.Total = total;\n  dailyRows.push(row);\n}\n\n// UN SOLO item de salida — facilita el Merge posterior\nreturn [{\n  json: {\n    source: 'weekly',\n    dashboard_summary: summary,\n    weekly_by_rep:     byRepRows,\n    daily_quotes:      dailyRows,\n  }\n}];\n"
+      },
+      "id": "461f2193-7fb1-49f9-9fbe-c6ec29072986",
+      "name": "Code - Weekly Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3600,
+        3000
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// MONTHLY METRICS - webhook + Luxon, devuelve UN solo item\n// ============================================================\nconst { DateTime } = require('luxon');\n\nconst allItems       = $('Airtable - Monthly Deals').all();\nconst activeRepItems = $('Airtable - Active Reps').all();\nconst payload        = $('Webhook').first().json;\n\nconst TZ       = payload.tz       || 'America/Denver';\nconst dateFrom = payload.dateFrom;\nconst dateTo   = payload.dateTo;\n\nconst EXCLUDED_REPS = ['Bradley Fry'];\n\nconst repIdToName = {};\nconst allRepNames = new Set();\nfor (const item of activeRepItems) {\n  const row = item.json.fields ?? item.json;\n  const fullName = String(row['Full Name'] ?? '').trim();\n  const recordId = item.json.id ?? '';\n  if (fullName) {\n    allRepNames.add(fullName);\n    if (recordId) repIdToName[recordId] = fullName;\n  }\n}\nconst activeRepNames = new Set([...allRepNames].filter(n => !EXCLUDED_REPS.includes(n)));\n\nconst CONFIG = {\n  createdField: 'Date Created',\n  repField:     'Sales',\n  stageField:   'Stage',\n  artworkField: 'LMT Art Sent To Customer (from Artwork)',\n};\n\nfunction resolveRep(value) {\n  if (Array.isArray(value)) return value.map(v => resolveRep(v)).flat().filter(Boolean);\n  let str = String(value ?? '').trim();\n  if (!str) return [];\n  str = str.replace(/^\\d+:/, '');\n  if (str.startsWith('rec') && repIdToName[str]) return [repIdToName[str]];\n  if (allRepNames.has(str)) return [str];\n  if (!str.startsWith('rec')) return [str];\n  return [];\n}\nfunction normalizeStage(v) { if (Array.isArray(v)) return String(v[0] ?? '').trim(); return String(v ?? '').trim(); }\nfunction formatPct(n, d) { if (!d) return '0.00%'; return `${((n / d) * 100).toFixed(2)}%`; }\nfunction isWithinRange(isoOrEpoch) {\n  const d = DateTime.fromISO(String(isoOrEpoch), { zone: 'utc' }).setZone(TZ);\n  const start = DateTime.fromISO(dateFrom, { zone: TZ }).startOf('day');\n  const end   = DateTime.fromISO(dateTo,   { zone: TZ }).endOf('day');\n  return d >= start && d <= end;\n}\n\nconst monthLabel = `${dateFrom} -> ${dateTo}`;\nconst reps = Array.from(activeRepNames).sort((a, b) => a.localeCompare(b));\nconst byRep = {};\nconst seenIds = new Set();\nlet displayTotalLeads = 0, displayTotalArtwork = 0, displayTotalClosedWon = 0;\n\nfor (const item of allItems) {\n  const id = item.json.id ?? '';\n  if (id && seenIds.has(id)) continue;\n  if (id) seenIds.add(id);\n\n  const row = item.json.fields ?? item.json;\n  const created = row[CONFIG.createdField];\n  if (!created || !isWithinRange(created)) continue;\n\n  const rep = (resolveRep(row[CONFIG.repField])[0] ?? '');\n  if (!rep || !allRepNames.has(rep)) continue;\n\n  const artworkValue = row[CONFIG.artworkField];\n  const hasArtwork = Array.isArray(artworkValue) ? artworkValue.length > 0\n    : (artworkValue !== null && artworkValue !== undefined && artworkValue !== '');\n  const isClosedWon = normalizeStage(row[CONFIG.stageField]) === 'Closed Won';\n\n  displayTotalLeads += 1;\n  if (hasArtwork)  displayTotalArtwork += 1;\n  if (isClosedWon) displayTotalClosedWon += 1;\n\n  if (EXCLUDED_REPS.includes(rep)) continue;\n  if (!byRep[rep]) byRep[rep] = { total_leads: 0, artwork_reached: 0, closed_won: 0 };\n  byRep[rep].total_leads += 1;\n  if (hasArtwork)  byRep[rep].artwork_reached += 1;\n  if (isClosedWon) byRep[rep].closed_won += 1;\n}\n\nconst nowIso = DateTime.now().setZone(TZ).toISO();\nconst monthlyByRepRows = reps.map((rep) => {\n  const d = byRep[rep] ?? { total_leads: 0, artwork_reached: 0, closed_won: 0 };\n  return {\n    Rep: rep, Month: monthLabel,\n    Total_Leads:     d.total_leads,\n    Artwork_Sent:    d.artwork_reached,\n    Lead_to_Art_Pct: formatPct(d.artwork_reached, d.total_leads),\n    Closed_Won:      d.closed_won,\n    Close_Rate_Pct:  formatPct(d.closed_won, d.total_leads),\n    Last_Refresh:    nowIso,\n  };\n});\n\nconst activeTotalLeads     = monthlyByRepRows.reduce((s, r) => s + r.Total_Leads, 0);\nconst activeTotalArtwork   = monthlyByRepRows.reduce((s, r) => s + r.Artwork_Sent, 0);\nconst activeTotalClosedWon = monthlyByRepRows.reduce((s, r) => s + r.Closed_Won, 0);\n\nconst monthlySummary = {\n  Month: monthLabel,\n  'Total_Leads (with Bradley)':       displayTotalLeads,\n  'Total_Leads (Active Reps)':        activeTotalLeads,\n  'Artwork_Sent (with Bradley)':      displayTotalArtwork,\n  'Artwork_Sent (Active Reps)':       activeTotalArtwork,\n  Lead_to_Art_Pct:                    formatPct(activeTotalArtwork,   activeTotalLeads),\n  'Total_Closed_Won (with Bradley)':  displayTotalClosedWon,\n  'Total_Closed_Won (Active Reps)':   activeTotalClosedWon,\n  Close_Rate_Pct:                     formatPct(activeTotalClosedWon, activeTotalLeads),\n  Active_Reps:                        reps.length,\n  Last_Refresh:                       nowIso,\n};\n\nreturn [{\n  json: {\n    source: 'monthly',\n    monthly_summary: monthlySummary,\n    monthly_by_rep:  monthlyByRepRows,\n  }\n}];\n"
+      },
+      "id": "b998cd15-5823-43d4-90ef-3b33bfda39ba",
+      "name": "Code - Monthly Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3600,
+        3400
+      ]
+    },
+    {
+      "id": "f1acbb89-c4e9-42be-98b4-f9f6c84aa169",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3200,
+        3200
+      ],
+      "parameters": {
+        "mode": "append"
+      }
+    },
+    {
+      "id": "87b9df1e-1484-4a17-8a1a-6c8ae9d4f40f",
+      "name": "Assemble Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2900,
+        3200
+      ],
+      "parameters": {
+        "jsCode": "// Assemble final response JSON for the dashboard frontend\nconst weeklyOut  = $('Code - Weekly Metrics').first()?.json  ?? {};\nconst monthlyOut = $('Code - Monthly Metrics').first()?.json ?? {};\n\nreturn [{\n  json: {\n    summary:        weeklyOut.dashboard_summary ?? {},\n    byRep:          weeklyOut.weekly_by_rep     ?? [],\n    daily:          weeklyOut.daily_quotes      ?? [],\n    monthlySummary: monthlyOut.monthly_summary  ?? {},\n    monthlyByRep:   monthlyOut.monthly_by_rep   ?? [],\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "ec181eb9-d42d-4cb3-8b14-377096834542",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -2600,
+        3200
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Airtable - Active Reps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable - Active Reps": {
+      "main": [
+        [
+          {
+            "node": "Airtable - Weekly Deals",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Airtable - Monthly Deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable - Weekly Deals": {
+      "main": [
+        [
+          {
+            "node": "Code - Weekly Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable - Monthly Deals": {
+      "main": [
+        [
+          {
+            "node": "Code - Monthly Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Weekly Metrics": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Monthly Metrics": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Assemble Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "timezone": "America/Denver",
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "fcea9abd-4044-4475-96bd-fece2e25d633",
+  "meta": {
+    "instanceId": "7a6a948b30bf243e3533261c54208a8a7852d7a26516cd35b70d459282d4507b"
+  },
+  "id": "fab5fdcf-5f4a-4c1f-818d-2dc8939113aa",
+  "tags": []
+}
