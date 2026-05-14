@@ -514,6 +514,7 @@
    CONFIGURACIÓN - WEBHOOK N8N
    ============================================================ */
 const N8N_WEBHOOK_URL = "https://api.pinprosplus.com/webhook/dashboard";  // ← Reemplaza con tu URL de webhook
+const BUSINESS_TZ    = "America/Denver";                                  // ← TZ del negocio (Airtable). Cambiar si la operación se muda.
 
 /* ============================================================
    CHART.JS DEFAULTS
@@ -618,12 +619,20 @@ function pick(row, baseKey){
 
 /* ============================================================
    FETCH DATA FROM N8N WEBHOOK
+   ============================================================
+   Contrato con n8n:
+     - dateFrom / dateTo: YYYY-MM-DD (sin TZ, sin hora). n8n los interpreta
+       como "00:00 a 23:59:59 en BUSINESS_TZ".
+     - tz: timezone del negocio (Airtable). Permite al backend hacer
+       SET_TIMEZONE y bucketear días correctamente sin depender de la TZ
+       del servidor n8n.
    ============================================================ */
 async function fetchDataFromWebhook(dateFrom, dateTo){
   try {
     const payload = {
-      dateFrom: dateFrom,
-      dateTo: dateTo
+      dateFrom: dateFrom,   // "YYYY-MM-DD" en TZ del negocio
+      dateTo:   dateTo,     // "YYYY-MM-DD" en TZ del negocio
+      tz:       BUSINESS_TZ // "America/Denver"
     };
 
     const response = await fetch(N8N_WEBHOOK_URL, {
@@ -1058,15 +1067,34 @@ $('#tableSearch').addEventListener('input', (e) => {
 });
 
 /* ---- SET DEFAULT DATES ---- */
-const today = new Date();
-const oneMonthAgo = new Date(today);
-oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+/* Calculamos "hoy" y "hace 1 mes" en la TZ del negocio (Denver), no en la
+   del navegador del usuario. Evita el bug de toISOString() que convertía
+   a UTC y podía adelantar/atrasar un día según la hora local. */
+function ymdInBusinessTz(date) {
+  // Intl.DateTimeFormat con 'en-CA' produce ISO YYYY-MM-DD directamente
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: BUSINESS_TZ,
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(date);
+}
 
-$('#dateFrom').valueAsDate = oneMonthAgo;
-$('#dateTo').valueAsDate = today;
+const todayYmd = ymdInBusinessTz(new Date());
+
+// "Hace 1 mes" lo calculamos en Denver también, no en BA ni UTC
+const oneMonthAgoDate = (() => {
+  const parts = todayYmd.split('-').map(Number);
+  // Parseamos el YMD de Denver y restamos un mes en aritmética de calendario
+  const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  return d;
+})();
+const oneMonthAgoYmd = ymdInBusinessTz(oneMonthAgoDate);
+
+$('#dateFrom').value = oneMonthAgoYmd;
+$('#dateTo').value   = todayYmd;
 
 /* ---- BOOT: LOAD WITH DEFAULT DATES ---- */
-load(oneMonthAgo.toISOString().split('T')[0], today.toISOString().split('T')[0], false);
+load(oneMonthAgoYmd, todayYmd, false);
 </script>
 </body>
 </html>
